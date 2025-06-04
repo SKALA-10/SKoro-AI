@@ -1,6 +1,7 @@
 1) 터미널에서 진행
 brew update
 brew install pyenv
+poetry update
 
 
 2) 자기 폴더 위치에 맞는거 설치 (vscode에서 진행)
