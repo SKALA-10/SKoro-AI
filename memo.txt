@@ -1,0 +1,25 @@
+1) 터미널에서 진행
+brew update
+brew install pyenv
+
+
+2) 자기 폴더 위치에 맞는거 설치 (vscode에서 진행)
+cd skoro-ai
+poetry install   # 의존성 자동 설치 (.venv 생성됨)
+poetry shell     # 가상환경 진입
+
+
+* 주의사항 
+1) 무조건 pip install ~ 이거 대신 poetry add ~ 이거를 사용 
+
+1) 새로운 패키지를 추가할 때는 반드시 다음 명령어 사용:
+poetry add some-package
+
+2) 그 후 반드시 아래 파일을 git에 커밋하고 푸시:
+pyproject.toml
+poetry.lock
+
+3) 팀원은 아래 순서로 환경 세팅:
+git pull
+poetry install
+poetry shell
