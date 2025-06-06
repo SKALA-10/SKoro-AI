@@ -1,0 +1,37 @@
+# Python cache
+__pycache__/
+*.py[cod]
+*.so
+
+# Jupyter Notebook checkpoint
+.ipynb_checkpoints/
+
+# VSCode settings (optional)
+.vscode/
+
+# Poetry virtual env (in project)
+.env/
+.venv/
+
+# Ignore system-specific files
+.DS_Store
+
+# Jupyter notebook outputs (optional, if not version controlling notebooks)
+*.ipynb
+
+# Ignore logs or tmp
+*.log
+*.tmp
+
+# Ignore dotenv files
+.env
+.env.*
+
+# Bytecode from any directory
+**/__pycache__/
+**/*.pyc
+**/*.pyo
+**/*.pyd
+
+# Ignore poetry lock if only top-level dependencies tracked (선택)
+# poetry.lock
