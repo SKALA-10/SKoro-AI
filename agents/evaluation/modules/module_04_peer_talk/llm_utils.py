@@ -1,293 +1,295 @@
-# agents/evaluation/modules/module_04_peer_talk/llm_utils.py
-
 from db_utils import *
-from llm_utils import *
 
 import re
-import json
+import json 
 from typing import List, Dict
+from collections import defaultdict
 from dotenv import load_dotenv
 load_dotenv() 
 
 # LangChain LLM 관련 임포트
 from langchain_openai import ChatOpenAI
-from langchain.prompts import ChatPromptTemplate
-from langchain.schema import HumanMessage, SystemMessage, AIMessage
+from langchain_core.prompts import ChatPromptTemplate
+from langchain_core.messages import HumanMessage, SystemMessage, AIMessage
+
 
 # --- LLM 클라이언트 인스턴스 (전역 설정) ---
-llm = ChatOpenAI(model="gpt-4o", temperature=0)
-print(f"LLM Client initialized with model: {llm.model_name}, temperature: {llm.temperature}")
+llm_client = ChatOpenAI(model="gpt-4o-mini", temperature=0) 
+print(f"LLM Client initialized with model: {llm_client.model_name}, temperature: {llm_client.temperature}")
+
+# --- LLM 응답에서 JSON 코드 블록 추출 도우미 함수 ---
+def _extract_json_from_llm_response(text: str) -> str:
+    """LLM 응답 텍스트에서 ```json ... ``` 블록만 추출합니다."""
+    match = re.search(r"```(?:json)?\s*(.*?)\s*```", text, re.DOTALL)
+    if match:
+        return match.group(1).strip() # JSON 내용만 반환하고 양쪽 공백 제거
+    return text.strip()
 
 
-def _extract_work_keywords(work_content: str) -> List[str]:
-    """업무 내용에서 핵심 업무/프로세스 키워드 추출 (전 분야 대응)"""
-    work_keywords = []
+# --- 키워드 감정 분석을 위한 사전 정의 ---
+def get_predefined_keywords():
+    """미리 정의된 긍정/부정 키워드 리스트 반환"""
+    positive_keywords = {
+        '리더십', '책임감', '창의적', '적극적', '협력적', '소통능력', '문제해결', 
+        '성실함', '전문성', '혁신적', '팀워크', '긍정마인드', '배려심', '열정적',
+        '신뢰성', '효율성', '분석력', '추진력', '유연성', '성장지향', '도전정신',
+        '세심함', '논리적', '객관적', '체계적', '꼼꼼함', '친화력', '겸손함',
+        '배려', '책임감 있는', '밝은', '성실한', '문제해결력', '긍정적', '열정',
+        '추진력 있는', '주도적인', '목표지향적', '신뢰할 수 있는', '능동적인'
+    }
     
-    # 전 분야 업무 패턴
-    work_patterns = [
-        # IT/개발
-        r'(AI|ML|NLP|TensorFlow|Spring Boot|React|API|REST|UI/UX|시스템|데이터베이스|아키텍처)',
-        # 인사/HR
-        r'(채용|면접|교육|평가|복리후생|노사관계|인력관리|조직문화|성과관리)',
-        # 재무/회계
-        r'(예산|결산|회계|세무|자금|투자|원가|손익|재무제표|현금흐름)',
-        # 마케팅/홍보
-        r'(브랜딩|광고|캠페인|시장조사|고객분석|SNS|콘텐츠|프로모션|브랜드)',
-        # 영업/고객관리
-        r'(영업|고객|계약|제안|협상|수주|매출|고객만족|CRM|B2B|B2C)',
-        # 제조/생산
-        r'(생산|제조|품질|공정|설비|안전|물류|재고|납기|효율성)',
-        # 연구개발
-        r'(연구|개발|실험|특허|혁신|기술|프로토타입|테스트|검증|분석)',
-        # 법무/컴플라이언스
-        r'(계약|법무|컴플라이언스|리스크|감사|규정|정책|승인|검토)',
-        # 기획/전략
-        r'(기획|전략|계획|목표|성과|KPI|로드맵|분석|보고|의사결정)',
-        # 일반 업무
-        r'(회의|보고서|문서|프로젝트|협업|커뮤니케이션|조율|관리|실행|점검)',
-        # 숫자/성과 관련
-        r'(\d+%|\d+건|\d+명|\d+시간|\d+일|\d+개월|\d+년|\d+억|\d+만)',
-        # 업무 동사
-        r'(완료|달성|수행|진행|개선|해결|구축|운영|관리|지원)'
-    ]
+    negative_keywords = {
+        '소극적', '무관심', '비협조적', '고집스러운', '경직된', '회피형', '무의욕',
+        '산만함', '지각', '불성실', '감정적', '주관적', '독단적', '폐쇄적',
+        '수동적', '미루기', '책임회피', '소통부족', '부정적', '완고함', '예민함',
+        '소극적인', '실수가 잦은', '무의욕자', '개인주의', '소통단절', '부정적인',
+        '수동적인', '책임감 결여'
+    }
     
-    for pattern in work_patterns:
-        matches = re.findall(pattern, work_content, re.IGNORECASE)
-        work_keywords.extend([match for match in matches if isinstance(match, str)])
-    
-    return list(set(work_keywords))[:4]  # 상위 4개로 확장
+    return positive_keywords, negative_keywords
 
 
-def _process_work_content_for_context(work_content: str, work_keywords: List[str]) -> str:
-    """업무 내용을 문맥 생성용으로 압축 (전 분야 대응)"""
-    lines = work_content.split('.')
-    key_lines = []
-    
-    # 업무 관련 핵심 단어들 (전 분야)
-    key_terms = [
-        # 일반 업무 동사
-        '개발', '설계', '구현', '분석', '관리', '운영', '기획', '실행', '완료', '달성',
-        # 커뮤니케이션/협업
-        '인터뷰', '회의', '협업', '소통', '조율', '협상', '보고',
-        # 성과/결과
-        '개선', '해결', '성과', '목표', '효율', '품질', '만족',
-        # 문서/정보
-        '문서', '자료', '데이터', '정보', '계획', '전략'
-    ]
-    
-    for line in lines:
-        # 추출한 키워드가 포함된 라인 우선
-        if any(keyword.lower() in line.lower() for keyword in work_keywords):
-            key_lines.append(line.strip())
-        # 일반 업무 용어가 포함된 라인
-        elif any(term in line for term in key_terms):
-            key_lines.append(line.strip())
-    
-    return ' '.join(key_lines[:2])  # 상위 2개 라인만
-
-
-def _validate_and_enhance_sentence(sentence: str, keywords: str, work_keywords: List[str], weight: int) -> str:
-    """생성된 문장의 품질 검증 및 보완"""
-    # 길이 체크 및 조정
-    if len(sentence) > 150:
-        sentence = sentence[:147] + "..."
-    
-    # 업무 키워드가 포함되지 않은 경우 보완
-    has_work_context = any(keyword in sentence for keyword in work_keywords)
-    if not has_work_context and work_keywords:
-        sentence = f"{work_keywords[0]} 업무에서 {sentence}"
-    
-    return sentence
-
-
-def _create_enhanced_fallback_sentence(employee_id: str, keywords: str, work_content: str, weight: int) -> str:
-    """고도화된 기본 문장 생성 (개인 이름 없이)"""
-    work_keywords = _extract_work_keywords(work_content)
-    main_work = work_keywords[0] if work_keywords else "프로젝트"
-    
-    keyword_list = [k.strip() for k in keywords.split(',') if k.strip()]
-    main_keyword = keyword_list[0] if keyword_list else "협업"
-    
-    if weight >= 3:
-        return f"{main_work} 진행 과정에서 동료가 {main_keyword}한 모습을 지속적으로 보여주며 팀 성과에 기여함"
+def get_keyword_score(keyword: str, positive_keywords: set, negative_keywords: set) -> float:
+    """키워드의 감정 점수 반환"""
+    if keyword in positive_keywords:
+        return 1.0
+    elif keyword in negative_keywords:
+        return -1.0
     else:
-        return f"{main_work} 업무에서 해당 직원이 {main_keyword}한 특성을 나타냄"
+        return 0.0
 
 
-def call_llm_for_context_generation(keywords: str, work_situation: str, weight: int) -> str:
-    """LLM을 호출하여 맥락 문장 생성"""
+# --- 모듈 4 전용 LLM 호출 함수들 ---
+
+def call_llm_for_peer_evaluation_context(keywords: str, work_situation: str, weight: float) -> Dict:
+    """동료평가 맥락 문장 생성"""
+    print(f"LLM Call (Peer Evaluation Context): keywords='{keywords[:30]}...', weight={weight}")
+
+    system_prompt = """
+    당신은 동료평가 분석 전문가입니다. 
+    개인 이름을 절대 사용하지 말고 '동료' 또는 '해당 직원'이라는 표현만 사용하세요.
+    주어진 키워드들과 업무 상황을 바탕으로 구체적이고 자연스러운 평가 문장을 생성하세요.
+
+    결과는 다음 JSON 형식으로만 응답해주세요. 불필요한 서문이나 추가 설명 없이 JSON만 반환해야 합니다.
+    """
     
-    # 상세한 프롬프트 (요청하신 내용 포함)
-    detailed_prompt = ChatPromptTemplate.from_messages([
-        ("system", "당신은 동료평가 분석 전문가입니다. 개인 이름을 절대 사용하지 말고 '동료' 또는 '해당 직원'이라는 표현만 사용하세요."),
-        ("human", """다음 키워드들을 바탕으로 업무 상황에서의 평가 문장을 한 문장으로 작성하세요.
+    human_prompt = f"""
+    다음 키워드들을 바탕으로 업무 상황에서의 평가 문장을 한 문장으로 작성하세요.
 
-키워드: {keywords}
-업무 상황: {work_situation}
-평가 비중: {weight}
+    키워드: {keywords}
+    업무 상황: {work_situation[:100] + "..." if len(work_situation) > 100 else work_situation}
+    평가 비중: {weight}
 
-=== 문장 생성 가이드라인 ===
-1. 업무 맥락을 구체적으로 포함 
-   - IT: "시스템 구축 과정에서", "API 설계 회의 중에"
-   - 영업: "고객 프레젠테이션 중에", "계약 협상 과정에서"
-   - 인사: "채용 면접 진행 시", "교육 프로그램 기획 중에"
-   - 마케팅: "캠페인 기획 단계에서", "시장 조사 진행 중에"
-   - 재무: "예산 수립 과정에서", "재무제표 분석 중에"
-2. 키워드를 실제 행동이나 결과와 연결
-3. 비중이 높을수록(3-4) 더 구체적이고 상세한 상황 묘사
-4. 비중이 낮을수록(1-2) 간결하지만 핵심적인 특징 언급
-5. 관찰 가능한 구체적 행동, 결과, 영향에 초점
+    중요: 개인 이름, 사번 절대 사용 금지. '동료', '해당 직원' 등 일반적 표현만 사용.
 
-=== 작성 스타일 예시 (다양한 분야) ===
-❌ 피해야 할 표현: "동료가 리더십을 발휘함"
-✅ IT 분야: "시스템 요구사항 분석 단계에서 동료가 팀원들의 다양한 의견을 조율하며 배려심을 보였으나, 때때로 회피형 태도로 기술적 결정을 미루는 경향을 보임"
-✅ 영업 분야: "고객 프레젠테이션 준비 과정에서 해당 직원이 꼼꼼한 자료 분석을 통해 책임감을 보였지만, 무의욕한 태도로 팀워크에 부정적 영향을 미침"
-✅ 인사 분야: "신입사원 교육 프로그램 기획 시 동료가 창의적 아이디어를 제시하며 긍정마인드를 발휘했으나, 실행 단계에서 소극적인 모습을 보임"
-
-중요: 절대로 개인 이름이나 사번을 사용하지 마세요. 반드시 '동료', '해당 직원', '팀원' 등의 표현만 사용하세요.
-
-출력: 구체적인 업무 상황과 연결된 평가 문장만 반환 (150자 이내)
-""")
+    JSON 응답:
+    {{
+        "context_sentence": "[구체적인 업무 상황과 연결된 평가 문장 (150자 이내)]"
+    }}
+    """
+    
+    prompt = ChatPromptTemplate.from_messages([
+        SystemMessage(content=system_prompt),
+        HumanMessage(content=human_prompt)
     ])
     
+    chain = prompt | llm_client
+
     try:
-        # 메시지 생성
-        messages = detailed_prompt.format_messages(
-            keywords=keywords,
-            work_situation=work_situation,
-            weight=weight
-        )
+        response: AIMessage = chain.invoke({"keywords": keywords, "work_situation": work_situation, "weight": weight})
+        json_output_raw = response.content
+
+        json_output = _extract_json_from_llm_response(json_output_raw)
+
+        llm_parsed_data = json.loads(json_output)
+
+        context_sentence = llm_parsed_data.get("context_sentence", "업무 진행 과정에서 동료가 다양한 특성을 보임")
         
-        response = llm(messages)
-        요약문장 = response.content.strip()
+        # 개인정보 제거
+        context_sentence = context_sentence.replace("{evaluated_name}", "동료")
+        context_sentence = context_sentence.replace("{evaluator_name}", "동료")
+
+        if not isinstance(context_sentence, str) or not context_sentence:
+            raise ValueError(f"LLM 반환 문장 {context_sentence}가 유효하지 않습니다.")
+
+        return {"context_sentence": context_sentence}
         
-        # 혹시 모를 템플릿 변수나 개인 이름 제거
-        요약문장 = 요약문장.replace("{evaluated_name}", "동료")
-        요약문장 = 요약문장.replace("{evaluator_name}", "동료")
-        요약문장 = 요약문장.replace("evaluated_name", "동료")
-        요약문장 = 요약문장.replace("evaluator_name", "동료")
-        
-        return 요약문장
-        
+    except json.JSONDecodeError as e:
+        print(f"LLM 응답 JSON 파싱 오류: {e}. 원본 응답: '{json_output_raw}'. 파싱 시도 텍스트: '{json_output[:100]}...'")
+        return {"context_sentence": "업무 진행 과정에서 동료가 다양한 특성을 보임"}
+    except ValueError as e:
+        print(f"LLM 응답 데이터 유효성 오류: {e}. 원본 응답: '{json_output_raw}'. 파싱 시도 텍스트: '{json_output[:100]}...'")
+        return {"context_sentence": "업무 진행 과정에서 동료가 다양한 특성을 보임"}
     except Exception as e:
-        print(f"LLM 호출 중 오류 발생: {str(e)}")
-        return "업무 진행 과정에서 동료가 다양한 특성을 보임"
+        print(f"LLM 호출 중 예기치 않은 오류 발생: {e}. 원본 응답: '{json_output_raw}'")
+        return {"context_sentence": "업무 진행 과정에서 동료가 다양한 특성을 보임"}
 
 
-def call_llm_for_keyword_sentiment_analysis(keyword: str) -> str:
-    """새로운 키워드의 감정 분석"""
-    
-    sentiment_prompt = ChatPromptTemplate.from_messages([
-        ("system", """
-        당신은 동료평가 키워드 분석 전문가입니다.
-        주어진 키워드가 직장에서의 동료평가 맥락에서 긍정적인지 부정적인지 판단해주세요.
-        """),
-        ("human", """
-        다음 키워드가 직장 동료평가에서 긍정적인지 부정적인지 판단해주세요.
-
-        키워드: {keyword}
-
-        판단 기준:
-        - 긍정적: 업무 능력, 협업 태도, 성과 등에서 좋은 평가를 나타내는 키워드
-        - 부정적: 업무 능력, 협업 태도, 성과 등에서 개선이 필요한 평가를 나타내는 키워드  
-        - 중립적: 긍정도 부정도 아닌 객관적 특성을 나타내는 키워드
-
-        다음 중 하나로만 답해주세요: "긍정", "부정", "중립"
-        """)
-    ])
+def call_llm_for_keyword_weighted_analysis(keyword_collections: List[str], evaluation_weights: List[float]) -> Dict:
+    """키워드 가중치 분석 (기존 로직을 LLM 스타일로 래핑)"""
+    print(f"LLM Call (Keyword Weighted Analysis): {len(keyword_collections)}개 키워드 컬렉션 분석")
     
     try:
-        messages = sentiment_prompt.format_messages(keyword=keyword)
-        response = llm(messages)
-        sentiment = response.content.strip().lower()
+        positive_keywords, negative_keywords = get_predefined_keywords()
         
-        if "긍정" in sentiment:
-            return "긍정"
-        elif "부정" in sentiment:
-            return "부정"
-        else:
-            return "중립"
+        weighted_scores = defaultdict(float)
+        keyword_frequency = defaultdict(int)
+        total_weight = sum(evaluation_weights) if evaluation_weights else 0
+        
+        for i in range(len(keyword_collections)):
+            keywords = [k.strip() for k in keyword_collections[i].split(',') if k.strip()]
+            weight = evaluation_weights[i] if i < len(evaluation_weights) else 1.0
             
-    except Exception as e:
-        print(f"키워드 감정 분석 오류: {str(e)}")
-        return "중립"
-
-
-def call_llm_for_feedback_generation(employee_id: str, total_evaluations: int, positive_keywords: str, negative_keywords: str, context_sentences: List[str]) -> Dict[str, str]:
-    """최종 피드백 생성 LLM 호출"""
-    
-    # 더 강화된 프롬프트 템플릿
-    forced_prompt = ChatPromptTemplate.from_messages([
-        SystemMessage(content="""
-        당신은 전문 HR 컨설턴트입니다. 
-        주어진 정보가 제한적이더라도 반드시 의미 있는 피드백을 생성해야 합니다.
-        데이터가 부족하다는 이유로 피드백을 거부하지 마세요.
-        '평가 대상자'라는 표현을 사용하지 마세요.
-        "긍정 키워드로 인해", "부정 키워드가 언급된"와 같이 분석 용어를 사용하지 마세요.
-        """),
-        HumanMessage(content="""
-        다음 동료평가 정보를 바탕으로 피드백을 생성해주세요.
-
-        평가 건수: {total_evaluations}
+            for keyword in keywords:
+                keyword_frequency[keyword] += 1
+                score = get_keyword_score(keyword, positive_keywords, negative_keywords)
+                weighted_scores[keyword] += score * weight
         
-        긍정 키워드: {positive_keywords}
-        부정 키워드: {negative_keywords}
+        if total_weight > 0:
+            for keyword in weighted_scores:
+                weighted_scores[keyword] = weighted_scores[keyword] / total_weight
         
-        평가 상황들:
-        {context_sentences}
-
-        **중요**: 정보가 제한적이더라도 반드시 다음 JSON 형식으로 출력하세요:
-        {{
-          "강점": "실제 업무 상황에서 관찰된 긍정적 행동과 결과 (50-80자)",
-          "우려": "업무 맥락에서 나타난 개선점을 건설적으로 표현 (50-80자)",  
-          "협업관찰": "팀 내에서 보여준 협업 스타일과 소통 방식 (50-80자)"
-        }}
-
-        작성 규칙:
-        1. 반드시 JSON 형식으로 출력
-        2. 각 항목은 완전한 문장으로 작성
-        3. 상황 맥락을 포함한 자연스러운 서술
-        4. "데이터 부족"이나 "추가 분석 필요" 같은 표현 금지
-        5. 주어진 정보에서 최선의 해석으로 의미 있는 피드백 생성
-
-        데이터가 적어도 창의적으로 해석하여 반드시 피드백을 완성하세요.
-        """)
-    ])
-    
-    try:
-        # 메시지 생성
-        messages = forced_prompt.format_messages(
-            total_evaluations=total_evaluations,
-            positive_keywords=positive_keywords if positive_keywords else "협업, 책임감",
-            negative_keywords=negative_keywords if negative_keywords else "일부 개선 영역",
-            context_sentences="\n".join([f"- {s}" for s in context_sentences]) if context_sentences else "- 기본적인 업무 협력 상황"
-        )
+        positive_keywords_result = {k: v for k, v in weighted_scores.items() if v > 0}
+        negative_keywords_result = {k: v for k, v in weighted_scores.items() if v < 0}
         
-        response = llm(messages)
+        top_positive = dict(sorted(positive_keywords_result.items(), key=lambda x: x[1], reverse=True)[:5])
+        top_negative = dict(sorted(negative_keywords_result.items(), key=lambda x: x[1])[:3])
         
-        # JSON 파싱 시도
-        content = response.content.strip()
-        
-        # JSON 추출 시도
-        json_match = re.search(r'\{.*\}', content, re.DOTALL)
-        if json_match:
-            json_str = json_match.group()
-            feedback = json.loads(json_str)
-            
-            # 필수 키 확인
-            required_keys = ["강점", "우려", "협업관찰"]
-            if all(key in feedback for key in required_keys):
-                return feedback
-            else:
-                raise ValueError("필수 키 누락")
-        else:
-            raise ValueError("JSON 형식 불일치")
-            
-    except Exception as e:
-        print(f"LLM 피드백 생성 오류: {str(e)}")
-        # 기본값 반환
-        return {
-            "강점": "동료 평가에서 나타난 긍정적 특성을 바탕으로 팀에 기여하고 있습니다",
-            "우려": "지속적인 성장을 위해 일부 영역에서 추가적인 개발과 개선이 필요한 상황으로 보입니다",
-            "협업관찰": "팀 내에서의 역할 수행과 동료들과의 관계에서 전반적으로 안정적인 모습을 보여주고 있습니다"
+        analysis_result = {
+            "weighted_scores": dict(weighted_scores),
+            "keyword_frequency": dict(keyword_frequency),
+            "top_positive": top_positive,
+            "top_negative": top_negative,
+            "total_evaluations": len(keyword_collections),
+            "average_weight": total_weight / len(evaluation_weights) if evaluation_weights else 0,
+            "total_weight": total_weight
         }
+        
+        return analysis_result
+        
+    except Exception as e:
+        print(f"키워드 가중치 분석 실패: {str(e)}")
+        return {
+            "weighted_scores": {},
+            "keyword_frequency": {},
+            "top_positive": {},
+            "top_negative": {},
+            "total_evaluations": 0,
+            "average_weight": 0,
+            "total_weight": 0
+        }
+
+
+def call_llm_for_final_feedback_generation(weighted_analysis: Dict, top_sentences: List[str], target_emp_no: str) -> Dict:
+    """최종 피드백 생성 (강점, 우려, 협업관찰)"""
+    print(f"LLM Call (Final Feedback Generation): {target_emp_no} 피드백 생성")
+
+    top_positive = weighted_analysis.get("top_positive", {})
+    top_negative = weighted_analysis.get("top_negative", {})
+    total_evals = weighted_analysis.get("total_evaluations", 0)
+    avg_weight = weighted_analysis.get("average_weight", 0)
+    
+    positive_text = ", ".join([f"{k}({v:.2f})" for k, v in list(top_positive.items())[:3]])
+    negative_text = ", ".join([f"{k}({v:.2f})" for k, v in list(top_negative.items())[:2]])
+    sentences_text = "\n".join([f"- {s}" for s in top_sentences[:3]])
+    
+    system_prompt = """
+    당신은 동료평가 전문 분석가입니다. 
+    개인 이름이나 사번을 절대 사용하지 마세요.
+    주어진 분석 결과를 바탕으로 구조화된 피드백을 생성하세요.
+
+    결과는 다음 JSON 형식으로만 응답해주세요. 불필요한 서문이나 추가 설명 없이 JSON만 반환해야 합니다.
+    """
+
+    human_prompt = f"""
+    다음 동료평가 분석 결과를 바탕으로 구조화된 피드백을 생성하세요.
+
+    === 분석 데이터 ===
+    총 평가 수: {total_evals}개
+    평균 비중: {avg_weight:.1f}
+
+    주요 긍정 키워드: {positive_text or "데이터 부족"}
+    주요 부정 키워드: {negative_text or "특별한 우려사항 없음"}
+
+    핵심 평가 문장들:
+    {sentences_text or "구체적 평가 내용 부족"}
+
+    중요: 개인 이름, 사번 절대 사용 금지. '동료', '해당 직원' 등 일반적 표현만 사용.
+
+    JSON 응답:
+    {{
+        "strengths": "[구체적이고 균형잡힌 강점 서술]",
+        "concerns": "[건설적이고 개선지향적인 우려사항]",
+        "collaboration": "[객관적이고 행동중심의 협업 관찰]"
+    }}
+    """
+    
+    prompt = ChatPromptTemplate.from_messages([
+        SystemMessage(content=system_prompt),
+        HumanMessage(content=human_prompt)
+    ])
+    
+    chain = prompt | llm_client
+
+    try:
+        response: AIMessage = chain.invoke({
+            "weighted_analysis": weighted_analysis, 
+            "top_sentences": top_sentences, 
+            "target_emp_no": target_emp_no
+        })
+        json_output_raw = response.content
+        
+        json_output = _extract_json_from_llm_response(json_output_raw)
+        
+        llm_parsed_data = json.loads(json_output)
+        
+        strengths = llm_parsed_data.get("strengths", "동료들로부터 긍정적인 평가를 받고 있습니다")
+        concerns = llm_parsed_data.get("concerns", "지속적인 성장을 위한 개선 영역이 있습니다")
+        collaboration = llm_parsed_data.get("collaboration", "팀 내에서 협업에 참여하고 있습니다")
+
+        if not isinstance(strengths, str) or not strengths:
+            raise ValueError(f"LLM 반환 강점 {strengths}가 유효하지 않습니다.")
+        if not isinstance(concerns, str) or not concerns:
+            raise ValueError(f"LLM 반환 우려 {concerns}가 유효하지 않습니다.")
+        if not isinstance(collaboration, str) or not collaboration:
+            raise ValueError(f"LLM 반환 협업관찰 {collaboration}가 유효하지 않습니다.")
+
+        return {
+            "strengths": strengths,
+            "concerns": concerns,
+            "collaboration": collaboration
+        }
+
+    except json.JSONDecodeError as e:
+        print(f"LLM 응답 JSON 파싱 오류: {e}. 원본 응답: '{json_output_raw}'. 파싱 시도 텍스트: '{json_output[:100]}...'")
+        return _generate_fallback_feedback(top_positive, top_negative, total_evals)
+    except ValueError as e:
+        print(f"LLM 응답 데이터 유효성 오류: {e}. 원본 응답: '{json_output_raw}'. 파싱 시도 텍스트: '{json_output[:100]}...'")
+        return _generate_fallback_feedback(top_positive, top_negative, total_evals)
+    except Exception as e:
+        print(f"LLM 호출 중 예기치 않은 오류 발생: {e}. 원본 응답: '{json_output_raw}'")
+        return _generate_fallback_feedback(top_positive, top_negative, total_evals)
+
+
+def _generate_fallback_feedback(top_positive: Dict, top_negative: Dict, total_evals: int) -> Dict:
+    """LLM 호출 실패 시 대안 피드백 생성"""
+    
+    if top_positive:
+        positive_keywords = list(top_positive.keys())[:2]
+        strengths = f"동료 평가에서 {', '.join(positive_keywords)} 등의 긍정적 특성이 높게 평가되고 있습니다"
+    else:
+        strengths = "동료들과의 협업에서 다양한 긍정적 측면을 보여주고 있습니다"
+    
+    if top_negative:
+        negative_keywords = list(top_negative.keys())[:1] 
+        concerns = f"{negative_keywords[0]} 등의 영역에서 추가적인 개선과 발전이 필요할 것으로 보입니다"
+    else:
+        concerns = "전반적으로 안정적이나 지속적인 성장을 위한 노력이 필요합니다"
+    
+    collaboration = f"총 {total_evals}명의 동료로부터 평가받았으며 팀 내에서의 역할을 수행하고 있습니다"
+    
+    return {
+        "strengths": strengths,
+        "concerns": concerns,
+        "collaboration": collaboration
+    }

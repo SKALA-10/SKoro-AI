@@ -1,95 +1,77 @@
-# agents/evaluation/modules/module_04_peer_talk/run_module_04.py
+# 실행 스크립트 (모듈2 패턴 따라함)
 
+from typing import List
 from agent import create_module4_graph, Module4AgentState
-from db_utils import get_all_employees_in_period
+from db_utils import get_all_employees_in_period, check_existing_peer_evaluation_by_period
 from langchain_core.messages import HumanMessage
 
-def create_initial_state(period_id: int, emp_no: str) -> Module4AgentState:
-    """초기 상태 생성"""
-    return Module4AgentState(
-        messages=[HumanMessage(content=f"모듈 4: {emp_no} Peer Talk 분석 시작")],
-        분기=str(period_id),
-        평가받는사번=emp_no,
-        평가하는사번_리스트=[],
-        성과지표ID_리스트=[],
-        비중=[],
-        키워드모음=[],
-        구체적업무내용=[],
-        동료평가요약줄글들=[],
-        강점=[],
-        우려=[],
-        협업관찰=[],
-        _weighted_analysis={}
+def run_module4_single_employee(period_id: int, target_emp_no: str):
+    """모듈 4 단일 직원 분석 실행"""
+    # State 정의
+    state = Module4AgentState(
+        messages=[HumanMessage(content=f"모듈 4: {target_emp_no} 동료평가 분석 시작")],
+        period_id=period_id,
+        target_emp_no=target_emp_no,
+        peer_evaluation_ids=[],
+        evaluator_emp_nos=[],
+        evaluation_weights=[],
+        keyword_collections=[],
+        task_summaries=[],
+        peer_evaluation_summary_sentences=[],
+        strengths=[],
+        concerns=[],
+        collaboration_observations=[],
+        weighted_analysis_result={},
+        feedback_report_id=None,
+        final_evaluation_report_id=None
     )
 
-
-def run_module4_single(period_id: int, emp_no: str):
-    """모듈 4 단일 직원 실행"""
-    print(f"🎯 {emp_no} {period_id}분기 Peer Talk 분석 시작")
-    
-    # 초기 상태 생성
-    state = create_initial_state(period_id, emp_no)
-
     # 그래프 생성 및 실행
-    print("모듈 4 실행 시작...")
+    print(f"🎯 모듈 4 실행 시작: {target_emp_no} ({period_id}분기)...")
     module4_graph = create_module4_graph()
     result = module4_graph.invoke(state)
-    
-    print("모듈 4 실행 완료!")
+    print(f"✅ 모듈 4 실행 완료: {target_emp_no}")
     print(f"최종 메시지: {result['messages'][-1].content}")
     
-    # 결과 확인
-    if result and result.get("강점") and result.get("우려") and result.get("협업관찰"):
-        print(f"✅ {emp_no} 분석 완료!")
-        print(f"   강점: {result['강점'][0]}")
-        print(f"   우려: {result['우려'][0]}")
-        print(f"   협업관찰: {result['협업관찰'][0]}")
-    else:
-        print(f"⚠️ {emp_no} 분석 완료되었으나 결과가 불완전")
+    # 결과 요약 출력
+    if result.get('strengths'):
+        print(f"강점: {result['strengths'][0][:50]}...")
+    if result.get('concerns'):
+        print(f"우려: {result['concerns'][0][:50]}...")
+    if result.get('collaboration_observations'):
+        print(f"협업관찰: {result['collaboration_observations'][0][:50]}...")
     
     return result
 
-
-def run_module4_period(period_id: int):
-    """모듈 4 특정 분기 전체 직원 실행"""
-    print("=" * 80)
-    print(f"🚀 모듈 4: {period_id}분기 전체 직원 Peer Talk 분석 시작")
-    print("=" * 80)
+def run_module4_multiple_employees(period_id: int, emp_list: List[str]):
+    """모듈 4 여러 직원 일괄 분석 실행"""
+    print(f"🚀 모듈 4 일괄 분석 시작: {len(emp_list)}명 ({period_id}분기)")
     
-    from db_utils import engine
+    # 저장될 테이블 정보 표시
+    table_name = "final_evaluation_reports" if period_id == 4 else "feedback_reports"
+    print(f"💾 저장 테이블: {table_name}.ai_peer_talk_summary")
     
-    # 해당 분기의 모든 평가 대상자 조회
-    employee_list = get_all_employees_in_period(engine, period_id)
-    
-    if not employee_list:
-        print(f"❌ {period_id}분기에 분석할 직원이 없습니다.")
-        return {}
-    
-    # 그래프 생성
-    module4_graph = create_module4_graph()
-    
-    # 결과 저장
     results = {}
     success_count = 0
+    skipped_count = 0
     
-    # 각 직원 분석
-    for i, emp_no in enumerate(employee_list, 1):
-        print(f"\n[{i}/{len(employee_list)}] 📊 {emp_no} 분석 시작...")
+    for i, emp_no in enumerate(emp_list, 1):
+        print(f"\n[{i}/{len(emp_list)}] 📊 {emp_no} 분석 시작...")
         print("-" * 60)
         
+        # 기존 분석 결과 확인
+        if check_existing_peer_evaluation_by_period(period_id, emp_no):
+            print(f"⏭️ {emp_no}: 이미 분석 완료 ({table_name}), 스킵")
+            skipped_count += 1
+            results[emp_no] = "already_completed"
+            continue
+        
         try:
-            # 초기 상태 생성
-            initial_state = create_initial_state(period_id, emp_no)
+            result = run_module4_single_employee(period_id, emp_no)
             
-            # 워크플로우 실행
-            result = module4_graph.invoke(initial_state)
-            
-            # 결과 확인
-            if result and result.get("강점") and result.get("우려") and result.get("협업관찰"):
+            # 결과 검증
+            if (result and result.get('strengths') and result.get('concerns') and result.get('collaboration_observations')):
                 print(f"✅ {emp_no} 분석 완료!")
-                print(f"   강점: {result['강점'][0][:50]}...")
-                print(f"   우려: {result['우려'][0][:50]}...")
-                print(f"   협업관찰: {result['협업관찰'][0][:50]}...")
                 success_count += 1
             else:
                 print(f"⚠️ {emp_no} 분석 완료되었으나 결과가 불완전")
@@ -97,32 +79,76 @@ def run_module4_period(period_id: int):
             results[emp_no] = result
             
         except Exception as e:
-            print(f"❌ {emp_no} 분석 중 오류 발생: {str(e)}")
-            import traceback
-            traceback.print_exc()
+            print(f"❌ {emp_no} 분석 실패: {str(e)}")
             results[emp_no] = None
     
-    # 결과 요약
-    print("\n" + "=" * 80)
-    print("📊 분석 결과 요약")
-    print("=" * 80)
-    print(f"총 대상자: {len(employee_list)}명")
+    # 요약 출력
+    print(f"\n" + "="*80)
+    print(f"📊 분석 결과 요약 ({table_name} 테이블)")
+    print(f"="*80)
+    print(f"총 대상자: {len(emp_list)}명")
     print(f"성공: {success_count}명")
-    print(f"실패: {len(employee_list) - success_count}명")
-    print(f"\n✅ {period_id}분기 모듈 4 전체 분석 완료!")
+    print(f"스킵 (기존 완료): {skipped_count}명")
+    print(f"실패: {len(emp_list) - success_count - skipped_count}명")
     
     return results
 
+def run_module4_period_analysis(period_id: int):
+    """모듈 4 분기 전체 분석 실행"""
+    print(f"="*80)
+    print(f"🚀 모듈 4: {period_id}분기 전체 직원 동료평가 분석 시작")
+    print(f"="*80)
+    
+    # 해당 분기의 모든 평가 대상자 조회
+    emp_list = get_all_employees_in_period(period_id)
+    
+    if not emp_list:
+        print(f"❌ {period_id}분기에 분석할 직원이 없습니다.")
+        return {}
+    
+    print(f"📊 {period_id}분기 동료평가 대상자: {len(emp_list)}명")
+    for i, emp_no in enumerate(emp_list, 1):
+        print(f"  {i}. {emp_no}")
+    
+    # 일괄 분석 실행
+    results = run_module4_multiple_employees(period_id, emp_list)
+    
+    print(f"\n✅ 모듈 4: {period_id}분기 전체 분석 완료!")
+    return results
 
-def run_module4_quarterly():
-    """모듈 4 분기별 실행 (기본값: 3분기)"""
-    return run_module4_period(3)
-
+def quick_module4_analysis(emp_no: str, period_id: int):
+    """모듈 4 빠른 단일 분석"""
+    print(f"🎯 모듈 4 빠른 분석: {emp_no} ({period_id}분기)")
+    
+    # 기존 분석 결과 확인
+    if check_existing_peer_evaluation_by_period(period_id, emp_no):
+        table_name = "final_evaluation_reports" if period_id == 4 else "feedback_reports"
+        print(f"⏭️ {emp_no}: 이미 분석 완료 ({table_name}.ai_peer_talk_summary)")
+        return "already_completed"
+    
+    result = run_module4_single_employee(period_id, emp_no)
+    
+    if result and result.get('strengths'):
+        print("\n✅ 분석 결과:")
+        print(f"강점: {result['strengths'][0]}")
+        print(f"우려: {result['concerns'][0]}")  
+        print(f"협업관찰: {result['collaboration_observations'][0]}")
+    else:
+        print("❌ 분석 실패 또는 결과 없음")
+    
+    return result
 
 if __name__ == "__main__":
-    # 기본 실행: 3분기 전체 직원 분석
-    print("🚀 모듈 4: 3분기 Peer Talk 분석을 시작합니다.")
-    results = run_module4_quarterly()
+    # 예시 실행
+    # 단일 직원 분석
+    # quick_module4_analysis("EMP001", 3)
     
-    # 결과 확인
-    print(f"\n총 {len(results)}명의 직원이 분석되었습니다.")
+    # 분기 전체 분석
+    run_module4_period_analysis(3)
+    
+    print("\n🎉 모듈 4 실행 스크립트 로드 완료!")
+    print("사용 가능한 함수들:")
+    print("- run_module4_single_employee(period_id, target_emp_no)")
+    print("- run_module4_multiple_employees(period_id, emp_list)")
+    print("- run_module4_period_analysis(period_id)")
+    print("- quick_module4_analysis(emp_no, period_id)")
