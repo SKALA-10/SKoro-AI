@@ -14,7 +14,7 @@ from langchain_core.messages import HumanMessage, SystemMessage, AIMessage
 
 
 # --- LLM 클라이언트 인스턴스 (전역 설정) ---
-llm_client = ChatOpenAI(model="gpt-4o-mini", temperature=0) 
+llm_client = ChatOpenAI(model="gpt-4o", temperature=0) 
 print(f"LLM Client initialized with model: {llm_client.model_name}, temperature: {llm_client.temperature}")
 
 # --- LLM 응답에서 JSON 코드 블록 추출 도우미 함수 ---

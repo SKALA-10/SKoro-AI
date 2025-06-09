@@ -174,9 +174,15 @@ def format_peer_evaluation_result(strengths: List[str], concerns: List[str], col
     concern = concerns[0] if concerns and len(concerns) > 0 else "지속적인 성장을 위한 개선 영역이 있습니다."
     collaboration = collaboration_observations[0] if collaboration_observations and len(collaboration_observations) > 0 else "팀 내에서 협업에 참여하고 있습니다."
     
-    peer_review_result = f"""- 강점: {strength}
-- 우려: {concern}
-- 협업 관찰: {collaboration}"""
+
+    peer_review_result = f"""* **강점**:
+{strength}
+
+* **우려**:
+{concern}
+
+* **협업 관찰**:
+{collaboration}"""
     
     return peer_review_result
 
