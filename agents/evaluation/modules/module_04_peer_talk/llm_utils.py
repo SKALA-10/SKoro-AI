@@ -208,11 +208,11 @@ def call_llm_for_final_feedback_generation(weighted_analysis: Dict, top_sentence
     총 평가 수: {total_evals}개
     평균 비중: {avg_weight:.1f}
 
-    주요 긍정 키워드: {positive_text or "데이터 부족"}
-    주요 부정 키워드: {negative_text or "특별한 우려사항 없음"}
+    주요 긍정 키워드: {positive_text}
+    주요 부정 키워드: {negative_text}
 
     핵심 평가 문장들:
-    {sentences_text or "구체적 평가 내용 부족"}
+    {sentences_text}
 
     중요: 개인 이름, 사번 절대 사용 금지. '동료', '해당 직원' 등 일반적 표현만 사용.
 

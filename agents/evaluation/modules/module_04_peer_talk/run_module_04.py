@@ -138,17 +138,18 @@ def quick_module4_analysis(emp_no: str, period_id: int):
     
     return result
 
+
 if __name__ == "__main__":
     # 예시 실행
     # 단일 직원 분석
-    # quick_module4_analysis("EMP001", 3)
+    # quick_module4_analysis("E002", 3)
     
-    # 분기 전체 분석
-    run_module4_period_analysis(3)
+    # # 분기 전체 분석
+    run_module4_period_analysis(1)
     
     print("\n🎉 모듈 4 실행 스크립트 로드 완료!")
-    print("사용 가능한 함수들:")
-    print("- run_module4_single_employee(period_id, target_emp_no)")
-    print("- run_module4_multiple_employees(period_id, emp_list)")
-    print("- run_module4_period_analysis(period_id)")
-    print("- quick_module4_analysis(emp_no, period_id)")
+    # print("사용 가능한 함수들:")
+    # print("- run_module4_single_employee(period_id, target_emp_no)")
+    # print("- run_module4_multiple_employees(period_id, emp_list)")
+    # print("- run_module4_period_analysis(period_id)")
+    # print("- quick_module4_analysis(emp_no, period_id)")

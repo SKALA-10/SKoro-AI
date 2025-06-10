@@ -38,7 +38,7 @@ def fetch_peer_evaluations_for_target(period_id: int, target_emp_no: str) -> Lis
                 te.period_id,
                 pe.target_emp_no AS target_emp_no,
                 pe.emp_no AS evaluator_emp_no,
-                pe.progress AS weight
+                pe.weight AS weight
             FROM team_evaluations te
             JOIN peer_evaluations pe ON te.team_evaluation_id = pe.team_evaluation_id
             WHERE te.period_id = :period_id
@@ -105,7 +105,7 @@ def fetch_tasks_for_peer_evaluations(peer_evaluation_ids: List[int]) -> Dict[int
             row_dict = row_to_dict(row)
             task_map[row_dict["peer_evaluation_id"]].append(row_dict["task_id"])
         return dict(task_map)
-
+    
 
 def fetch_task_summaries(period_id: int, task_ids: List[int]) -> Dict[int, str]:
     """
@@ -119,12 +119,16 @@ def fetch_task_summaries(period_id: int, task_ids: List[int]) -> Dict[int, str]:
         placeholders = ','.join([f':task_{i}' for i in range(len(task_ids))])
         params = {f'task_{i}': task_id for i, task_id in enumerate(task_ids)}
         
-        # tasks 테이블에서 직접 task_performance 조회
+        # task_summaries 테이블에서 task_performance 조회
         query = text(f"""
-            SELECT task_id, task_performance as summary
-            FROM tasks
-            WHERE task_id IN ({placeholders})
+            SELECT ts.task_id, ts.task_performance as summary
+            FROM task_summaries ts
+            WHERE ts.task_id IN ({placeholders})
+              AND ts.period_id = :period_id
         """)
+        
+        # period_id 파라미터 추가
+        params['period_id'] = period_id
         
         results = connection.execute(query, params).fetchall()
         return {row_to_dict(row)["task_id"]: row_to_dict(row)["summary"] for row in results}
