@@ -133,7 +133,7 @@ class TeamSimilarityAnalyzer:
         self.tfidf_matrix = None
         self.cluster_labels = None
         self.similarity_matrix = None
-        self.similarity_threshold = 0.15
+        self.similarity_threshold = 0.2
         
     def load_team_data(self):
         """팀 KPI 데이터 로드 및 전처리"""
@@ -588,14 +588,211 @@ class IndividualSimilarityAnalyzer:
                     print(f"    - {individual['emp_name']}({individual['emp_no']}) - {individual['position']}")
 
 
+class SimilarityCache:
+    """유사도 분석 결과 캐시 관리 클래스"""
+    
+    def __init__(self, cache_dir="./data/cache"):
+        self.cache_dir = cache_dir
+        self.cache_file = os.path.join(cache_dir, "similarity_cache_2024.json")
+        
+        # 캐시 디렉토리 생성
+        os.makedirs(cache_dir, exist_ok=True)
+    
+    def load_cache(self) -> Dict:
+        """캐시 파일 로드"""
+        if os.path.exists(self.cache_file):
+            try:
+                with open(self.cache_file, 'r', encoding='utf-8') as f:
+                    return json.load(f)
+            except Exception as e:
+                print(f"캐시 파일 로드 실패: {e}")
+                return self._create_empty_cache()
+        else:
+            return self._create_empty_cache()
+    
+    def _create_empty_cache(self) -> Dict:
+        """빈 캐시 구조 생성"""
+        return {
+            "teams": {},
+            "individuals": {},
+            "metadata": {
+                "created_at": datetime.now().isoformat(),
+                "last_updated": datetime.now().isoformat(),
+                "teams_updated_at": None,
+                "individuals_last_quarter": None
+            }
+        }
+    
+    def save_team_results(self, team_analyzer: 'TeamSimilarityAnalyzer'):
+        """팀 유사도 결과 저장 (연초 1회)"""
+        print("팀 유사도 결과를 캐시에 저장 중...")
+        
+        cache = self.load_cache()
+        
+        # 팀 클러스터링 결과 저장
+        teams_data = {}
+        
+        for team in team_analyzer.team_data:
+            team_id = team['team_id']
+            
+            # 유사 팀 목록 생성
+            similar_teams = team_analyzer.get_similar_teams(team_id, include_scores=True)
+            
+            teams_data[str(team_id)] = {
+                "team_info": {
+                    "team_name": team['team_name'],
+                    "headquarter_name": team['headquarter_name'],
+                    "cluster": team['cluster']
+                },
+                "similar_teams": [
+                    {
+                        "team_id": sim_team['team_id'],
+                        "team_name": sim_team['team_name'],
+                        "similarity_score": sim_team['similarity_score']
+                    }
+                    for sim_team in similar_teams
+                ],
+                "similarity_config": {
+                    "threshold": team_analyzer.similarity_threshold,
+                    "cluster_method": "kmeans"
+                }
+            }
+        
+        # 캐시에 저장
+        cache["teams"] = teams_data
+        cache["metadata"]["teams_updated_at"] = datetime.now().isoformat()
+        cache["metadata"]["last_updated"] = datetime.now().isoformat()
+        
+        self._save_cache(cache)
+        print(f"팀 유사도 결과 저장 완료: {len(teams_data)}개 팀")
+    
+    def save_individual_results(self, individual_analyzer: 'IndividualSimilarityAnalyzer', quarter: str):
+        """개인 유사도 결과 저장 (분기별 추가)"""
+        print(f"개인 유사도 결과를 캐시에 저장 중... (분기: {quarter})")
+        
+        cache = self.load_cache()
+        
+        # 개인 클러스터링 결과 저장
+        individuals_data = {}
+        
+        for group_key, result in individual_analyzer.cluster_results.items():
+            cl_data = {}
+            
+            # 클러스터별로 개인 목록 생성
+            clusters = {}
+            for individual in result['individuals']:
+                cluster_id = individual['cluster']
+                if cluster_id not in clusters:
+                    clusters[cluster_id] = []
+                
+                clusters[cluster_id].append({
+                    "emp_no": individual['emp_no'],
+                    "emp_name": individual['emp_name'],
+                    "position": individual['position'],
+                    "team_name": individual['team_name'],
+                    "headquarter_name": individual['headquarter_name']
+                })
+            
+            cl_data = {
+                "clusters": clusters,
+                "cluster_config": {
+                    "n_clusters": result['n_clusters'],
+                    "silhouette_score": result.get('silhouette_score', 0.0),
+                    "threshold": individual_analyzer.similarity_threshold
+                },
+                "total_individuals": len(result['individuals'])
+            }
+            
+            individuals_data[group_key] = cl_data
+        
+        # 캐시에 분기별로 저장
+        if "individuals" not in cache:
+            cache["individuals"] = {}
+        
+        cache["individuals"][quarter] = individuals_data
+        cache["metadata"]["individuals_last_quarter"] = quarter
+        cache["metadata"]["last_updated"] = datetime.now().isoformat()
+        
+        self._save_cache(cache)
+        print(f"개인 유사도 결과 저장 완료: {quarter} - {len(individuals_data)}개 CL 그룹")
+    
+    def _save_cache(self, cache: Dict):
+        """캐시 파일 저장"""
+        try:
+            with open(self.cache_file, 'w', encoding='utf-8') as f:
+                json.dump(cache, f, ensure_ascii=False, indent=2)
+        except Exception as e:
+            print(f"캐시 파일 저장 실패: {e}")
+    
+    def get_similar_teams_from_cache(self, team_id: int) -> List[int]:
+        """캐시에서 유사 팀 목록 조회"""
+        cache = self.load_cache()
+        
+        if "teams" not in cache or str(team_id) not in cache["teams"]:
+            return []
+        
+        team_data = cache["teams"][str(team_id)]
+        return [sim_team["team_id"] for sim_team in team_data["similar_teams"]]
+    
+    def get_similar_individuals_from_cache(self, emp_no: str, quarter: str, cl: int) -> List[str]:
+        """캐시에서 유사 개인 목록 조회"""
+        cache = self.load_cache()
+        
+        if ("individuals" not in cache or 
+            quarter not in cache["individuals"] or 
+            f"CL{cl}" not in cache["individuals"][quarter]):
+            return []
+        
+        cl_data = cache["individuals"][quarter][f"CL{cl}"]
+        
+        # 해당 개인이 속한 클러스터 찾기
+        target_cluster = None
+        target_team = None
+        
+        for cluster_id, individuals in cl_data["clusters"].items():
+            for individual in individuals:
+                if individual["emp_no"] == emp_no:
+                    target_cluster = cluster_id
+                    target_team = individual["team_name"]
+                    break
+            if target_cluster is not None:
+                break
+        
+        if target_cluster is None:
+            return []
+        
+        # 같은 클러스터, 다른 팀의 개인들 반환
+        similar_individuals = []
+        for individual in cl_data["clusters"][target_cluster]:
+            if (individual["emp_no"] != emp_no and 
+                individual["team_name"] != target_team):
+                similar_individuals.append(individual["emp_no"])
+        
+        return similar_individuals
+    
+    def get_cache_status(self) -> Dict:
+        """캐시 상태 조회"""
+        cache = self.load_cache()
+        
+        status = {
+            "cache_file_exists": os.path.exists(self.cache_file),
+            "teams_cached": len(cache.get("teams", {})) > 0,
+            "individuals_quarters": list(cache.get("individuals", {}).keys()),
+            "metadata": cache.get("metadata", {})
+        }
+        
+        return status
+
+
 class SimilarityAnalyzer:
     """통합 유사도 분석 클래스"""
     
-    def __init__(self):
+    def __init__(self, cache_dir="./data/cache"):
         self.team_analyzer = TeamSimilarityAnalyzer()
         self.individual_analyzer = IndividualSimilarityAnalyzer()
+        self.cache = SimilarityCache(cache_dir)
     
-    def analyze_teams(self):
+    def analyze_teams(self, save_to_cache=True):
         """팀 유사도 분석 실행"""
         print("=== 팀 유사도 분석 시작 ===")
         try:
@@ -604,33 +801,70 @@ class SimilarityAnalyzer:
             self.team_analyzer.perform_clustering()
             self.team_analyzer.calculate_similarity_matrix()
             self.team_analyzer.analyze_clusters()
+            
+            # 캐시 저장
+            if save_to_cache:
+                self.cache.save_team_results(self.team_analyzer)
+            
             print("팀 유사도 분석 완료!")
             return True
         except Exception as e:
             print(f"팀 유사도 분석 실패: {e}")
             return False
     
-    def analyze_individuals(self, period_id: int):
+    def analyze_individuals(self, period_id: int, save_to_cache=True):
         """개인 유사도 분석 실행"""
-        print(f"=== 개인 유사도 분석 시작 (분기 {period_id}) ===")
+        quarter = f"Q{period_id}"
+        print(f"=== 개인 유사도 분석 시작 (분기 {quarter}) ===")
+        
         try:
             self.individual_analyzer.load_individual_data(period_id)
             self.individual_analyzer.group_by_cl_only()
             self.individual_analyzer.cluster_by_group()
             self.individual_analyzer.analyze_individual_clusters()
+            
+            # 캐시 저장
+            if save_to_cache:
+                self.cache.save_individual_results(self.individual_analyzer, quarter)
+            
             print("개인 유사도 분석 완료!")
             return True
         except Exception as e:
             print(f"개인 유사도 분석 실패: {e}")
             return False
     
-    def get_similar_teams(self, team_id: int, include_scores=False):
-        """유사 팀 조회"""
-        return self.team_analyzer.get_similar_teams(team_id, include_scores)
+    def get_similar_teams(self, team_id: int, use_cache=True, include_scores=False):
+        """유사 팀 조회 (캐시 우선, 실패시 실시간 분석)"""
+        if use_cache:
+            cached_teams = self.cache.get_similar_teams_from_cache(team_id)
+            if cached_teams:
+                return cached_teams
+        
+        # 캐시에 없으면 실시간 분석 결과 사용
+        if self.team_analyzer.team_data is not None:
+            return self.team_analyzer.get_similar_teams(team_id, include_scores)
+        else:
+            print("팀 분석이 수행되지 않았습니다. analyze_teams()를 먼저 실행하세요.")
+            return []
     
-    def get_similar_individuals(self, emp_no: str, include_scores=False):
-        """유사 개인 조회"""
-        return self.individual_analyzer.get_similar_individuals(emp_no, include_scores)
+    def get_similar_individuals(self, emp_no: str, period_id: int, cl: int, use_cache=True, include_scores=False):
+        """유사 개인 조회 (캐시 우선, 실패시 실시간 분석)"""
+        if use_cache:
+            quarter = f"Q{period_id}"
+            cached_individuals = self.cache.get_similar_individuals_from_cache(emp_no, quarter, cl)
+            if cached_individuals:
+                return cached_individuals
+        
+        # 캐시에 없으면 실시간 분석 결과 사용
+        if self.individual_analyzer.cluster_results:
+            return self.individual_analyzer.get_similar_individuals(emp_no, include_scores)
+        else:
+            print(f"개인 분석이 수행되지 않았습니다. analyze_individuals({period_id})를 먼저 실행하세요.")
+            return []
+    
+    def get_cache_status(self):
+        """캐시 상태 조회"""
+        return self.cache.get_cache_status()
 
 
 # 모듈로 사용될 때를 위한 기본 설정
