@@ -23,3 +23,4 @@ def complete_team_evaluation():
     # 필요한 데이터 AI에 전송
 
     # 데이터 받으면 다 저장
+    pass
