@@ -1,5 +1,5 @@
 from fastapi import APIRouter
-from schemas.evaluation_feedback import EvaluationFeedbackRequest
+from schemas.evaluation_feedback import EvaluationFeedbackRequest, EvaluationFeedbackResponse
 from services.evaluation_feedback_service import EvaluationFeedbackService
 
 router = APIRouter()
