@@ -20,10 +20,11 @@ class TeamEvaluationService:
 
     # 팀 평가 레포트 DB에 저장(중간 산출물)
     def save_team_evaluation_report(self):
+        pass
 
     # 임시 평가 Redis에 저장
     def save_temp_evaluation_to_redis(self):
-
+        pass
     
     def download_team_evaluation_report(self, emp_no: str, period_id: int):
 
