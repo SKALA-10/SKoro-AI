@@ -1,9 +1,14 @@
 from schemas.chat import ChatRequest, ChatResponse
+from agents.evaluation.modules.chatbot.main_chatbot import SKChatbot
 
 class ChatService:
-    def chat_with_skoro(self, request: ChatRequest) -> str:
-        
-        # 챗봇한테 메시지 보내고 받음
+    def __init__(self):
+        self.chatbot = SKChatbot()
 
-        # 프론트에 메시지 반환
-        return f"{request.message}에 대한 응답입니다."
+    def chat_with_skoro(self, request: ChatRequest) -> dict:
+        return self.chatbot.chat(
+            user_id=request.user_id,
+            chat_mode=request.chat_mode,
+            user_input=request.message,
+            appeal_complete=request.appeal_complete or False
+        )

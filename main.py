@@ -5,7 +5,10 @@ from routers import feedback_report_router, final_evaluation_report_router, team
 
 app = FastAPI(
     title="SKoro-AI API",
-    version="1.0.0"
+    version="1.0.0",
+    docs_url="/api/ai/docs",           
+    redoc_url=None,                          
+    openapi_url="/api/ai/openapi.json"
 )
 
 # CORS 설정

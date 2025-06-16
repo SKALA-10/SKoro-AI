@@ -10,6 +10,6 @@ chat_service = ChatService()
 @router.post("/skoro", response_model=ChatResponse)
 def chat_with_skoro(request: ChatRequest):
 
-    response = chat_service.chat_with_skoro(request)
+    response_dict = chat_service.chat_with_skoro(request)
 
-    return ChatResponse(response=response)
+    return ChatResponse(**response_dict)
