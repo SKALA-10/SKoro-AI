@@ -7,7 +7,7 @@ SKChatbot 메인 클래스 - 외부에서 호출하는 인터페이스
 """
 
 from typing import Dict, List
-from sk_chatbot import create_chatbot_workflow, session_manager
+from .sk_chatbot import create_chatbot_workflow, session_manager
 
 class SKChatbot:
     """SK 성과평가 챗봇 - LangGraph 기반"""
