@@ -241,7 +241,7 @@ def qna_agent_node(state: ChatState) -> ChatState:
 
     try:
         # ✅ 통합 검색 함수 사용 (중복 제거!)
-        from rag_retriever import search_for_qna
+        from .rag_retriever import search_for_qna
         
         retrieved_docs = search_for_qna(query, user_metadata)
 
@@ -364,7 +364,7 @@ def appeal_dialogue_node(state: ChatState) -> ChatState:
             print("🔍 팩트 체크를 위한 문서 검색 중...")
             
             # ✅ 통합 검색 함수 사용 (중복 제거!)
-            from rag_retriever import search_for_appeal
+            from .rag_retriever import search_for_appeal
             
             retrieved_docs = search_for_appeal(query, user_metadata)
             
