@@ -23,11 +23,11 @@ app.add_middleware(
 # 라우터
 api_router = APIRouter()
 
-app.include_router(feedback_report_router.router)
-app.include_router(final_evaluation_report_router.router)
-app.include_router(team_evaluation_router.router, prefix="/team-evaluation")
-app.include_router(evaluation_feedback_router.router, prefix="/evaluation-feedback")
-app.include_router(chat_router.router, prefix="/chat")
+api_router.include_router(feedback_report_router.router)
+api_router.include_router(final_evaluation_report_router.router)
+api_router.include_router(team_evaluation_router.router, prefix="/team-evaluation")
+api_router.include_router(evaluation_feedback_router.router, prefix="/evaluation-feedback")
+api_router.include_router(chat_router.router, prefix="/chat")
 
 app.include_router(api_router, prefix="/api/ai")
 
