@@ -3,7 +3,7 @@ from typing import Literal, Optional
 
 class ChatRequest(BaseModel):
     user_id: str
-    chat_mode: Literal["default", "qna_response"]
+    chat_mode: Literal["default", "appeal_to_manager"]
     message: str
     appeal_complete: Optional[bool] = False
 
