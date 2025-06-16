@@ -9,7 +9,7 @@ RAG 검색 관련 함수들을 모아둔 파일
 from typing import Dict, List, Tuple
 
 # sk_chatbot에서 전역 객체들 import
-from sk_chatbot import embedding_model, index_reports, index_policy, index_appeals
+from .sk_chatbot import embedding_model, index_reports, index_policy, index_appeals
 
 def search_documents_with_access_control(
     query: str,
