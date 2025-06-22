@@ -4,7 +4,7 @@ from llm_utils import *
 from dotenv import load_dotenv
 load_dotenv()
 
-from typing import Annotated, List, Literal, TypedDict, Dict
+from typing import Annotated, List, Literal, TypedDict, Dict, Optional
 from langchain_core.messages import HumanMessage 
 import operator
 from langgraph.graph import StateGraph, START, END
@@ -22,32 +22,32 @@ class Module4AgentState(TypedDict):
     target_emp_no: str 
     
     # 동료평가 기본 데이터
-    peer_evaluation_ids: List[int] = []
-    evaluator_emp_nos: List[str] = []
-    evaluation_weights: List[float] = []
+    peer_evaluation_ids: List[int]
+    evaluator_emp_nos: List[str]
+    evaluation_weights: List[float]
     
     # 키워드 및 업무 데이터
-    keyword_collections: List[str] = []
-    task_summaries: List[str] = []
+    keyword_collections: List[str]
+    task_summaries: List[str]
     
     # 분석 결과
-    peer_evaluation_summary_sentences: List[str] = []
-    strengths: List[str] = []
-    concerns: List[str] = []
-    collaboration_observations: List[str] = []
+    peer_evaluation_summary_sentences: List[str]
+    strengths: List[str]
+    concerns: List[str]
+    collaboration_observations: List[str]
     
     # 내부 분석 데이터
-    weighted_analysis_result: Dict = {}
+    weighted_analysis_result: Dict
     
     # DB 저장 결과
-    feedback_report_id: int = None
-    final_evaluation_report_id: int = None
+    feedback_report_id: Optional[int]
+    final_evaluation_report_id: Optional[int]
 
 
 # --- 서브모듈 함수 정의 ---
 
 # 1. 데이터 수집 서브모듈
-def data_collection_submodule(state: Module4AgentState) -> Module4AgentState:
+def data_collection_submodule(state: Module4AgentState) -> Dict:
     """동료평가 데이터 수집 및 초기화"""
     messages = state.get("messages", []) + [HumanMessage(content="모듈 4: 동료평가 데이터 수집 시작")] 
     
@@ -119,7 +119,7 @@ def data_collection_submodule(state: Module4AgentState) -> Module4AgentState:
 
 
 # 2. 맥락 생성 서브모듈
-def context_generation_submodule(state: Module4AgentState) -> Module4AgentState:
+def context_generation_submodule(state: Module4AgentState) -> Dict:
     """동료평가 맥락 문장 생성"""
     messages = state.get("messages", []) + [HumanMessage(content="모듈 4: 동료평가 맥락 생성 시작")]
     
@@ -154,7 +154,7 @@ def context_generation_submodule(state: Module4AgentState) -> Module4AgentState:
 
 
 # 3. 가중치 분석 서브모듈
-def weighted_analysis_submodule(state: Module4AgentState) -> Module4AgentState:
+def weighted_analysis_submodule(state: Module4AgentState) -> Dict:
     """키워드 가중치 분석"""
     messages = state.get("messages", []) + [HumanMessage(content="모듈 4: 가중치 분석 시작")]
     
@@ -178,7 +178,7 @@ def weighted_analysis_submodule(state: Module4AgentState) -> Module4AgentState:
 
 
 # 4. 피드백 생성 서브모듈
-def feedback_generation_submodule(state: Module4AgentState) -> Module4AgentState:
+def feedback_generation_submodule(state: Module4AgentState) -> Dict:
     """최종 피드백 생성 (강점, 우려, 협업관찰)"""
     messages = state.get("messages", []) + [HumanMessage(content="모듈 4: 피드백 생성 시작")]
     
@@ -203,7 +203,7 @@ def feedback_generation_submodule(state: Module4AgentState) -> Module4AgentState
         
         strengths = [feedback_result.get("strengths", "동료들로부터 긍정적인 평가를 받고 있습니다")]
         concerns = [feedback_result.get("concerns", "지속적인 성장을 위한 개선 영역이 있습니다")]
-        collaboration_observations = [feedback_result.get("collaboration", "팀 내에서 협업에 참여하고 있습니다")]
+        collaboration_observations = [feedback_result.get("collaboration_observations", "팀 내에서 협업에 참여하고 있습니다")]
         
         messages = messages + [HumanMessage(content="모듈 4: 피드백 생성 완료")]
         
@@ -226,7 +226,7 @@ def feedback_generation_submodule(state: Module4AgentState) -> Module4AgentState
 
 
 # 5. DB 저장 서브모듈
-def database_storage_submodule(state: Module4AgentState) -> Module4AgentState:
+def database_storage_submodule(state: Module4AgentState) -> Dict:
     """분기별 DB 저장 (feedback_reports 또는 final_evaluation_reports)"""
     messages = state.get("messages", []) + [HumanMessage(content="모듈 4: DB 저장 시작")]
     
@@ -269,7 +269,7 @@ def database_storage_submodule(state: Module4AgentState) -> Module4AgentState:
 
 
 # 6. 포맷터 서브모듈
-def formatter_submodule(state: Module4AgentState) -> Module4AgentState:
+def formatter_submodule(state: Module4AgentState) -> Dict:
     """최종 결과 포맷팅"""
     messages = state.get("messages", []) + [HumanMessage(content="모듈 4: 동료평가 분석 완료")]
     return {"messages": messages}

@@ -3,6 +3,7 @@ from sqlalchemy import create_engine, text
 from sqlalchemy.engine import Row
 from typing import Optional, List, Dict, Any
 from collections import defaultdict
+import json
 
 import sys
 import os
@@ -173,22 +174,18 @@ def get_team_evaluation_id_by_emp_and_period(emp_no: str, period_id: int) -> Opt
 # --- 모듈 4 전용 DB 저장 함수들 ---
 
 def format_peer_evaluation_result(strengths: List[str], concerns: List[str], collaboration_observations: List[str]) -> str:
-    """강점, 우려, 협업관찰을 줄바꿈 포함한 텍스트로 포맷팅"""
-    strength = strengths[0] if strengths and len(strengths) > 0 else "동료들로부터 긍정적인 평가를 받고 있습니다."
-    concern = concerns[0] if concerns and len(concerns) > 0 else "지속적인 성장을 위한 개선 영역이 있습니다."
-    collaboration = collaboration_observations[0] if collaboration_observations and len(collaboration_observations) > 0 else "팀 내에서 협업에 참여하고 있습니다."
+    """강점, 우려, 협업관찰을 JSON 문자열로 포맷팅"""
+    strength = strengths[0] if strengths else "동료들로부터 긍정적인 평가를 받고 있습니다."
+    concern = concerns[0] if concerns else "지속적인 성장을 위한 개선 영역이 있습니다."
+    collaboration = collaboration_observations[0] if collaboration_observations else "팀 내에서 협업에 참여하고 있습니다."
+
+    result_dict = {
+        "strengths": strength,
+        "concerns": concern,
+        "collaboration_observations": collaboration
+    }
     
-
-    peer_review_result = f"""* **강점**:
-{strength}
-
-* **우려**:
-{concern}
-
-* **협업 관찰**:
-{collaboration}"""
-    
-    return peer_review_result
+    return json.dumps(result_dict, ensure_ascii=False, indent=2)
 
 
 def save_feedback_peer_summary(emp_no: str, period_id: int, ai_peer_talk_summary: str) -> Optional[int]:

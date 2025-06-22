@@ -220,7 +220,7 @@ def call_llm_for_final_feedback_generation(weighted_analysis: Dict, top_sentence
     {{
         "strengths": "[구체적이고 균형잡힌 강점 서술]",
         "concerns": "[건설적이고 개선지향적인 우려사항]",
-        "collaboration": "[객관적이고 행동중심의 협업 관찰]"
+        "collaboration_observations": "[객관적이고 행동중심의 협업 관찰]"
     }}
     """
     
@@ -245,7 +245,7 @@ def call_llm_for_final_feedback_generation(weighted_analysis: Dict, top_sentence
         
         strengths = llm_parsed_data.get("strengths", "동료들로부터 긍정적인 평가를 받고 있습니다")
         concerns = llm_parsed_data.get("concerns", "지속적인 성장을 위한 개선 영역이 있습니다")
-        collaboration = llm_parsed_data.get("collaboration", "팀 내에서 협업에 참여하고 있습니다")
+        collaboration = llm_parsed_data.get("collaboration_observations", "팀 내에서 협업에 참여하고 있습니다")
 
         if not isinstance(strengths, str) or not strengths:
             raise ValueError(f"LLM 반환 강점 {strengths}가 유효하지 않습니다.")
@@ -257,7 +257,7 @@ def call_llm_for_final_feedback_generation(weighted_analysis: Dict, top_sentence
         return {
             "strengths": strengths,
             "concerns": concerns,
-            "collaboration": collaboration
+            "collaboration_observations": collaboration
         }
 
     except json.JSONDecodeError as e:
@@ -291,5 +291,5 @@ def _generate_fallback_feedback(top_positive: Dict, top_negative: Dict, total_ev
     return {
         "strengths": strengths,
         "concerns": concerns,
-        "collaboration": collaboration
+        "collaboration_observations": collaboration
     }
