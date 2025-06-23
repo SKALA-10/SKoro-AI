@@ -745,8 +745,8 @@ def call_llm_for_manager_result(basic_info: Dict, growth_analysis: Dict,
     작성 원칙:
     - "해당 직원의", "○○○님의" 등 관리 대상 표현 사용
     - 팀 운영과 인사 관리 포커스
-    - 객관적이고 사실 기반의 분석적 표현
-    - 의사결정 지원 정보 제공
+    - strengths, improvement_points, collaboration_style, performance_summary는 핵심 키워드 중심으로 간결하게 요약
+    - next_quarter_coaching은 구체적이고 실행 가능한 다음 분기 액션 플랜을 1~2문장의 간결한 서술형으로 작성
     
     ⚠️ 중요: 반드시 제공된 JSON 구조를 그대로 사용하세요.
     - emp_no와 name 필드는 정확히 제공된 값으로 설정
@@ -788,11 +788,11 @@ def call_llm_for_manager_result(basic_info: Dict, growth_analysis: Dict,
             {{
                 "emp_no": "{emp_no}",
                 "name": "{emp_name}",
-                "strengths": "핵심 강점을 관리자 관점으로 요약",
-                "improvement_points": "성장 보완점을 관리 관점으로 설명",
-                "collaboration_style": "협업 특성 및 팀 내 역할 분석",
-                "performance_summary": "성과 기여 요약",
-                "next_quarter_coaching": "다음 분기 코칭 제안사항"
+                "strengths": "핵심 강점 키워드 1, 키워드 2",
+                "improvement_points": "개선 필요 역량 키워드 1, 키워드 2",
+                "collaboration_style": "협업 스타일 키워드 (예: 리더형, 조율자형), 특징",
+                "performance_summary": "핵심 성과 지표 요약 (예: 달성률 X%, 팀 내 달성률 Y위)",
+                "next_quarter_coaching": "다음 분기에 실행할 구체적이고 간결한 코칭 제안. (1~2 문장)"
             }}
         ],
         "focused_coaching": []
@@ -802,7 +802,7 @@ def call_llm_for_manager_result(basic_info: Dict, growth_analysis: Dict,
     1. emp_no와 name은 반드시 "{emp_no}"와 "{emp_name}"으로 설정
     2. general_coaching은 하나의 항목만 생성
     3. focused_coaching은 빈 배열로 설정 (별도 처리됨)
-    4. JSON 구조를 변경하지 마세요
+    4. 상위 4개 항목은 키워드 위주로, next_quarter_coaching은 간결한 서술형으로 작성하세요.
     """
     
     prompt = ChatPromptTemplate.from_messages([
