@@ -114,7 +114,6 @@ def fetch_performance_data(emp_no: str, period_id: int, report_type: str) -> Dic
             if report_type == "quarterly":
                 query = text("""
                     SELECT fr.contribution_rate, fr.ai_overall_contribution_summary_comment,
-                           fr.ranking, 
                            AVG(ts.ai_achievement_rate) as ai_achievement_rate,
                            AVG(ts.ai_contribution_score) as avg_contribution_score
                     FROM feedback_reports fr
@@ -126,12 +125,12 @@ def fetch_performance_data(emp_no: str, period_id: int, report_type: str) -> Dic
                         WHERE ts.period_id = :period_id
                     ) ts ON ts.emp_no = fr.emp_no
                     WHERE fr.emp_no = :emp_no AND te.period_id = :period_id
-                    GROUP BY fr.emp_no, fr.contribution_rate, fr.ai_overall_contribution_summary_comment, fr.ranking
+                    GROUP BY fr.emp_no, fr.contribution_rate, fr.ai_overall_contribution_summary_comment
                 """)
             else:  # annual
                 query = text("""
                     SELECT fer.contribution_rate, fer.ai_annual_achievement_rate as ai_achievement_rate,
-                           fer.ai_annual_performance_summary_comment, fer.ranking, fer.score
+                           fer.ai_annual_performance_summary_comment, fer.score
                     FROM final_evaluation_reports fer
                     JOIN team_evaluations te ON fer.team_evaluation_id = te.team_evaluation_id
                     WHERE fer.emp_no = :emp_no AND te.period_id = :period_id
@@ -289,6 +288,67 @@ def fetch_module9_final_score_data(emp_no: str, period_id: int, report_type: str
         except Exception as e:
             print(f"모듈 9 최종 점수 데이터 조회 실패: {e}")
             return {}
+
+def calculate_ranking_by_achievement(emp_no: str, team_id: str, period_id: int, report_type: str) -> int:
+    """팀 내 달성률 기반 순위를 동적으로 계산"""
+    with engine.connect() as connection:
+        try:
+            if report_type == "quarterly":
+                # 분기 랭킹: task_summaries의 ai_achievement_rate 평균 기준
+                query = text("""
+                    WITH team_achievements AS (
+                        SELECT
+                            e.emp_no,
+                            COALESCE(AVG(ts.ai_achievement_rate), 0) as achievement_rate
+                        FROM employees e
+                        LEFT JOIN (
+                            SELECT t.emp_no, ts.ai_achievement_rate
+                            FROM tasks t
+                            JOIN task_summaries ts ON t.task_id = ts.task_id
+                            WHERE ts.period_id = :period_id
+                        ) ts ON e.emp_no = ts.emp_no
+                        WHERE e.team_id = :team_id
+                        GROUP BY e.emp_no
+                    )
+                    SELECT
+                        emp_no,
+                        RANK() OVER (ORDER BY achievement_rate DESC) as ranking
+                    FROM team_achievements
+                """)
+            else:  # annual
+                # 연간 랭킹: final_evaluation_reports의 ai_annual_achievement_rate 기준
+                query = text("""
+                    WITH team_achievements AS (
+                        SELECT
+                            e.emp_no,
+                            COALESCE(fer.ai_annual_achievement_rate, 0) as achievement_rate
+                        FROM employees e
+                        LEFT JOIN (
+                            SELECT fer_inner.emp_no, fer_inner.ai_annual_achievement_rate
+                            FROM final_evaluation_reports fer_inner
+                            JOIN team_evaluations te ON fer_inner.team_evaluation_id = te.team_evaluation_id
+                            WHERE te.period_id = :period_id
+                        ) fer ON e.emp_no = fer.emp_no
+                        WHERE e.team_id = :team_id
+                    )
+                    SELECT
+                        emp_no,
+                        RANK() OVER (ORDER BY achievement_rate DESC) as ranking
+                    FROM team_achievements
+                """)
+
+            params = {"team_id": team_id, "period_id": period_id}
+            rank_list = connection.execute(query, params).fetchall()
+
+            for row in rank_list:
+                if row[0] == emp_no:
+                    return int(row[1]) if row[1] is not None else 0
+
+            return 0
+
+        except Exception as e:
+            print(f"달성률 기반 순위 계산 실패: {e}")
+            return 0
 
 # ================================================================
 # LLM 호출 함수들
@@ -936,7 +996,18 @@ def data_collection_submodule(state: Module10AgentState) -> Module10AgentState:
         
         # 기본 5개 데이터 소스 수집
         basic_info = fetch_basic_info(emp_no)
+        if not basic_info or not basic_info.get("team_id"):
+            raise ValueError(f"{emp_no}의 기본 정보 또는 팀 정보를 찾을 수 없습니다.")
+
+        team_id = basic_info["team_id"]
+
         performance_data = fetch_performance_data(emp_no, period_id, report_type)
+
+        # 달성률 기반으로 실시간 순위 계산
+        ranking = calculate_ranking_by_achievement(emp_no, team_id, period_id, report_type)
+        performance_data['ranking'] = ranking
+        print(f"   📊 달성률 기반 순위 계산 완료: {ranking}위")
+
         peer_talk_data = fetch_peer_talk_data(emp_no, period_id, report_type)
         fourp_data = fetch_fourp_data(emp_no, period_id, report_type)
         collaboration_data = fetch_collaboration_data(emp_no, period_id)
