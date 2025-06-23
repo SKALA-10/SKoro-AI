@@ -404,7 +404,7 @@ def call_llm_for_growth_analysis(basic_info: Dict, performance_data: Dict,
     달성률: {performance_data.get('ai_achievement_rate', 0)}% 
     → {'목표 초과달성' if performance_data.get('ai_achievement_rate', 0) >= 100 else '목표 미달성'}
     기여도: {performance_data.get('contribution_rate', 0)}%
-    팀 내 순위: {performance_data.get('ranking', 0)}위
+    팀 내 달성률 순위: {performance_data.get('ranking', 0)}위
     → {'상위권' if performance_data.get('ranking', 5) <= 3 else '중위권' if performance_data.get('ranking', 5) <= 5 else '하위권'}
     </성과 데이터 분석>
 
@@ -505,7 +505,7 @@ def call_llm_for_focus_coaching_analysis(peer_talk_data: Dict, performance_data:
     human_prompt = f"""
     <분석 데이터>
     달성률: {performance_data.get('ai_achievement_rate', 0)}%
-    순위: {performance_data.get('ranking', 0)}위
+    달성률 순위: {performance_data.get('ranking', 0)}위
     협업률: {collaboration_data.get('collaboration_rate', 0)}%
     People 점수: {fourp_data.get('people', {}).get('score', 3.0)}점
     
@@ -684,7 +684,7 @@ def call_llm_for_overall_comment(basic_info: Dict, performance_data: Dict,
     📊 성과 결과 (모듈 2):
     - 달성률: {performance_data.get('ai_achievement_rate', 0)}%
     - 기여도: {performance_data.get('contribution_rate', 0)}%
-    - 팀 내 순위: {performance_data.get('ranking', 0)}위
+    - 팀 내 달성률 순위: {performance_data.get('ranking', 0)}위
     
     🤝 협업 분석 (모듈 3):
     - 협업률: {collaboration_data.get('collaboration_rate', 0)}%
@@ -771,7 +771,7 @@ def call_llm_for_manager_result(basic_info: Dict, growth_analysis: Dict,
     <성과 및 협업 데이터>
     달성률: {performance_data.get('ai_achievement_rate', 0)}%
     기여도: {performance_data.get('contribution_rate', 0)}%
-    순위: {performance_data.get('ranking', 0)}위
+    달성률 순위: {performance_data.get('ranking', 0)}위
     협업률: {collaboration_data.get('collaboration_rate', 0)}%
     팀 역할: {collaboration_data.get('team_role', '정보 없음')}
     </성과 및 협업 데이터>
