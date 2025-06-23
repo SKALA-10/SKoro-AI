@@ -688,6 +688,11 @@ def call_llm_for_manager_result(basic_info: Dict, growth_analysis: Dict,
     - 객관적이고 사실 기반의 분석적 표현
     - 의사결정 지원 정보 제공
     
+    ⚠️ 중요: 반드시 제공된 JSON 구조를 그대로 사용하세요.
+    - emp_no와 name 필드는 정확히 제공된 값으로 설정
+    - JSON 구조를 변경하지 마세요
+    - 하나의 직원에 대한 하나의 general_coaching 항목만 생성하세요
+    
     결과는 JSON 형식으로만 응답하세요.
     """
     
@@ -716,7 +721,8 @@ def call_llm_for_manager_result(basic_info: Dict, growth_analysis: Dict,
     집중 코칭 분석: {focus_coaching_analysis if focus_coaching_needed else '해당 없음'}
     </집중 코칭 필요성>
 
-    JSON 응답:
+    위 데이터를 바탕으로 다음 JSON 구조로 정확히 응답하세요:
+
     {{
         "general_coaching": [
             {{
@@ -729,10 +735,14 @@ def call_llm_for_manager_result(basic_info: Dict, growth_analysis: Dict,
                 "next_quarter_coaching": "다음 분기 코칭 제안사항"
             }}
         ],
-        "focused_coaching": [
-            {focus_coaching_analysis if focus_coaching_needed else '[]'}
-        ]
+        "focused_coaching": []
     }}
+
+    ⚠️ 주의사항:
+    1. emp_no와 name은 반드시 "{emp_no}"와 "{emp_name}"으로 설정
+    2. general_coaching은 하나의 항목만 생성
+    3. focused_coaching은 빈 배열로 설정 (별도 처리됨)
+    4. JSON 구조를 변경하지 마세요
     """
     
     prompt = ChatPromptTemplate.from_messages([
@@ -747,6 +757,12 @@ def call_llm_for_manager_result(basic_info: Dict, growth_analysis: Dict,
         json_output_raw = response.content if isinstance(response.content, str) else str(response.content)
         json_output = _extract_json_from_llm_response(json_output_raw)
         result = json.loads(json_output)
+        
+        # 🔥 중요: LLM 응답 후 emp_no와 name을 강제로 설정
+        if "general_coaching" in result and result["general_coaching"]:
+            for coaching_item in result["general_coaching"]:
+                coaching_item["emp_no"] = emp_no
+                coaching_item["name"] = emp_name
         
         # focused_coaching 처리
         if focus_coaching_needed and focus_coaching_analysis:
@@ -1356,6 +1372,87 @@ def display_result_summary(result: Dict):
         print(f"   ⚠️ 오류: {len(result['error_messages'])}건")
 
 # ================================================================
+# 데이터 정리 함수들
+# ================================================================
+
+def clean_ai_team_coaching_data(team_id: str, period_id: int):
+    """기존 ai_team_coaching 데이터에서 빈 emp_no 항목들을 제거"""
+    with engine.connect() as connection:
+        try:
+            # 기존 데이터 조회
+            query = text("""
+                SELECT ai_team_coaching 
+                FROM team_evaluations 
+                WHERE team_id = :team_id AND period_id = :period_id
+            """)
+            
+            result = connection.execute(query, {
+                "team_id": team_id,
+                "period_id": period_id
+            }).fetchone()
+            
+            if not result or not result.ai_team_coaching:
+                print(f"정리할 데이터가 없습니다: {team_id}")
+                return
+            
+            try:
+                data = json.loads(result.ai_team_coaching)
+            except json.JSONDecodeError:
+                print(f"JSON 파싱 실패: {team_id}")
+                return
+            
+            # 빈 emp_no 항목들 제거
+            original_general_count = len(data.get("general_coaching", []))
+            original_focused_count = len(data.get("focused_coaching", []))
+            
+            data["general_coaching"] = [
+                item for item in data.get("general_coaching", [])
+                if item.get("emp_no") and item.get("emp_no").strip()
+            ]
+            
+            data["focused_coaching"] = [
+                item for item in data.get("focused_coaching", [])
+                if item.get("emp_no") and item.get("emp_no").strip()
+            ]
+            
+            cleaned_general_count = len(data.get("general_coaching", []))
+            cleaned_focused_count = len(data.get("focused_coaching", []))
+            
+            # 업데이트
+            update_query = text("""
+                UPDATE team_evaluations 
+                SET ai_team_coaching = :result
+                WHERE team_id = :team_id AND period_id = :period_id
+            """)
+            
+            connection.execute(update_query, {
+                "team_id": team_id,
+                "period_id": period_id,
+                "result": json.dumps(data, ensure_ascii=False)
+            })
+            
+            connection.commit()
+            
+            print(f"✅ 데이터 정리 완료: {team_id}")
+            print(f"   general_coaching: {original_general_count} → {cleaned_general_count}")
+            print(f"   focused_coaching: {original_focused_count} → {cleaned_focused_count}")
+            
+        except Exception as e:
+            print(f"❌ 데이터 정리 실패: {e}")
+            connection.rollback()
+
+def clean_all_team_coaching_data(period_id: int = 4):
+    """모든 팀의 ai_team_coaching 데이터 정리"""
+    teams = get_teams_with_data(period_id)
+    
+    print(f"🧹 {len(teams)}개 팀의 데이터 정리 시작...")
+    
+    for team_id in teams:
+        clean_ai_team_coaching_data(team_id, period_id)
+    
+    print("✅ 모든 팀 데이터 정리 완료!")
+
+# ================================================================
 # 메인 실행 부분
 # ================================================================
 
@@ -1376,6 +1473,8 @@ if __name__ == "__main__":
     print("4. test_module10()                                     # 테스트 실행")
     print("5. get_teams_with_data(4)                              # 데이터 있는 팀 조회")
     print("6. display_result_summary(result)                      # 결과 요약 출력")
+    print("7. clean_ai_team_coaching_data('1', 4)                # 특정 팀 데이터 정리")
+    print("8. clean_all_team_coaching_data(4)                    # 모든 팀 데이터 정리")
     
     print("\n📊 DB 저장 구조:")
     print("- ai_growth_coaching: 성장 제안 3개 항목 (JSON)")
@@ -1385,6 +1484,11 @@ if __name__ == "__main__":
     print("\n🎯 필요한 DB 스키마:")
     print("ALTER TABLE feedback_reports ADD COLUMN overall_comment TEXT;")
     print("ALTER TABLE final_evaluation_reports ADD COLUMN overall_comment TEXT;")
+    
+    print("\n🔧 수정 사항:")
+    print("✅ LLM 응답 후 emp_no/name 강제 설정")
+    print("✅ JSON 구조 명확화")
+    print("✅ 빈 emp_no 데이터 정리 함수 추가")
     
     # 자동 테스트 (필요시 주석 해제)
     # test_module10()
