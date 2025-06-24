@@ -945,27 +945,7 @@ def calculate_year_over_year_growth(team_id: int, current_period_id: int, curren
     
     return None
 
-# ===== 서브모듈 5: 코멘트 생성 =====
-def comment_generation_submodule(state: Module2State) -> Module2State:
-    """코멘트 생성 서브모듈 - 우리가 상의한 구조화 방식"""
-    print(f"   📝 코멘트 생성 중...")
-    
-    # 팀 일관성 가이드 생성
-    team_context_guide = generate_team_consistency_guide(state.team_id, state.period_id)
-    state.team_context_guide = team_context_guide
-    
-    # Task 코멘트 생성 (일괄 처리)
-    generate_task_comments(state)
-    
-    # 개인 종합 코멘트 생성
-    generate_individual_summary_comments(state)
-    
-    # 팀 전체 분석 코멘트 생성
-    generate_team_overall_comment(state)
-    
-    print(f"   ✅ 코멘트 생성 완료")
-    return state
-
+# ===== 팀 일관성 가이드 생성 함수 =====
 def generate_team_consistency_guide(team_id: int, period_id: int) -> Dict:
     """팀 단위 일관성 가이드 생성 - 우리가 상의한 방식"""
     team_members = fetch_team_members(team_id)
@@ -996,86 +976,309 @@ def generate_team_consistency_guide(team_id: int, period_id: int) -> Dict:
         "team_context": f"팀 평균 달성률 {team_avg_rate:.1f}%, {len(team_members)}명 구성"
     }
 
-def generate_task_comments(state: Module2State):
-    """Task별 코멘트 생성"""
+# ===== 통합 코멘트 생성 시스템 =====
+class CommentGenerator:
+    """통합 코멘트 생성 시스템 - 일관성 있는 코멘트 생성"""
+    
+    def __init__(self, comment_type: str, period_type: str, team_guide: Dict = None):
+        self.comment_type = comment_type  # "task", "individual", "team", "kpi"
+        self.period_type = period_type    # "quarterly", "annual"
+        self.team_guide = team_guide or {}
+        self.config = self._load_config()
+    
+    def _load_config(self) -> Dict:
+        """코멘트 타입별 설정 로드"""
+        base_configs = {
+            "task": {
+                "quarterly": {
+                    "elements": ["성과요약", "주요포인트", "팀기여도", "개선방향"],
+                    "tone": "건설적이고 격려적",
+                    "focus": "다음 분기 개선",
+                    "length": {"target": 250, "tolerance": 30}
+                },
+                "annual": {
+                    "elements": ["연간요약", "성장추이", "팀기여도", "발전방향"],
+                    "tone": "종합적이고 미래지향적",
+                    "focus": "내년 발전계획",
+                    "length": {"target": 300, "tolerance": 40}
+                }
+            },
+            "individual": {
+                "quarterly": {
+                    "elements": ["전체성과요약", "주요성과하이라이트", "성장포인트", "다음분기가이드"],
+                    "tone": "격려적이고 동기부여",
+                    "length": {"target": 350, "tolerance": 50}
+                },
+                "annual": {
+                    "elements": ["연간성과종합", "분기별성장추이", "핵심기여영역", "내년발전계획"],
+                    "tone": "종합평가적이고 비전제시",
+                    "length": {"target": 450, "tolerance": 50}
+                }
+            },
+            "team": {
+                "quarterly": {
+                    "elements": ["팀성과종합", "팀원기여분석", "주요성과영역", "팀운영개선점"],
+                    "tone": "분석적이고 관리자 관점",
+                    "length": {"target": 450, "tolerance": 50}
+                },
+                "annual": {
+                    "elements": ["연간팀성과요약", "팀조직력평가", "핵심성과기여", "내년팀전략"],
+                    "tone": "전략적이고 미래지향적",
+                    "length": {"target": 550, "tolerance": 50}
+                }
+            },
+            "kpi": {
+                "quarterly": {
+                    "elements": ["KPI달성현황", "주요성과분석", "팀기여도평가", "개선방향"],
+                    "tone": "객관적이고 분석적",
+                    "length": {"target": 200, "tolerance": 30}
+                },
+                "annual": {
+                    "elements": ["연간KPI종합", "성과추이분석", "팀기여도평가", "내년계획"],
+                    "tone": "종합적이고 전략적",
+                    "length": {"target": 250, "tolerance": 30}
+                }
+            }
+        }
+        
+        return base_configs.get(self.comment_type, {}).get(self.period_type, {})
+    
+    def generate(self, data: Dict, context: Dict = None) -> str:
+        """통합 코멘트 생성 메인 함수"""
+        if not self.config:
+            raise ValueError(f"Invalid comment type: {self.comment_type} or period type: {self.period_type}")
+        
+        context = context or {}
+        
+        # 코멘트 타입별 데이터 전처리
+        processed_data = self._preprocess_data(data)
+        
+        # 프롬프트 생성
+        prompt = self._create_prompt(processed_data, context)
+        
+        # LLM 호출 및 검증
+        comment = self._call_llm_with_validation(prompt)
+        
+        return comment
+    
+    def _preprocess_data(self, data: Dict) -> Dict:
+        """코멘트 타입별 데이터 전처리"""
+        if self.comment_type == "task":
+            return {
+                "task_name": data.get('task_name', ''),
+                "emp_name": data.get('emp_name', ''),
+                "emp_no": data.get('emp_no', ''),
+                "target_level": data.get('target_level', ''),
+                "performance": data.get('cumulative_performance', ''),
+                "achievement_rate": data.get('ai_achievement_rate', 0),
+                "contribution_score": data.get('ai_contribution_score', 0)
+            }
+        
+        elif self.comment_type == "individual":
+            tasks = data.get('tasks', [])
+            tasks_summary = ""
+            total_achievement = 0
+            total_contribution = 0
+            
+            for task in tasks:
+                tasks_summary += f"- {task.get('task_name', '')}: 달성률 {task.get('ai_achievement_rate', 0)}%, 기여도 {task.get('ai_contribution_score', 0)}점\n"
+                total_achievement += task.get('ai_achievement_rate', 0)
+                total_contribution += task.get('ai_contribution_score', 0)
+            
+            avg_achievement = total_achievement / len(tasks) if tasks else 0
+            avg_contribution = total_contribution / len(tasks) if tasks else 0
+            
+            return {
+                "emp_name": data.get('emp_name', ''),
+                "emp_no": data.get('emp_no', ''),
+                "position": data.get('position', ''),
+                "cl": data.get('cl', ''),
+                "tasks_summary": tasks_summary,
+                "avg_achievement": avg_achievement,
+                "avg_contribution": avg_contribution,
+                "task_count": len(tasks)
+            }
+        
+        elif self.comment_type == "team":
+            kpis = data.get('kpis', [])
+            kpis_summary = ""
+            total_rate = 0
+            
+            for kpi in kpis:
+                rate = kpi.get('ai_kpi_progress_rate', 0)
+                weight = kpi.get('weight', 0)
+                kpis_summary += f"- {kpi.get('kpi_name', '')}: {rate}% (비중 {weight}%)\n"
+                total_rate += rate * (weight / 100)
+            
+            return {
+                "kpis_summary": kpis_summary,
+                "total_rate": total_rate,
+                "team_context": data.get('team_context', ''),
+                "performance_level": data.get('performance_level', '')
+            }
+        
+        elif self.comment_type == "kpi":
+            tasks = data.get('tasks', [])
+            tasks_text = ""
+            for task in tasks:
+                tasks_text += f"- {task.get('emp_name', '')}: {task.get('task_name', '')}\n"
+                tasks_text += f"  목표: {task.get('target_level', '')}\n"
+                tasks_text += f"  성과: {task.get('task_performance', '')}\n"
+            
+            return {
+                "kpi_name": data.get('kpi_name', ''),
+                "kpi_description": data.get('kpi_description', ''),
+                "tasks_text": tasks_text
+            }
+        
+        return data
+    
+    def _create_prompt(self, data: Dict, context: Dict) -> str:
+        """통합 프롬프트 생성"""
+        elements = self.config.get('elements', [])
+        tone = self.config.get('tone', '')
+        focus = self.config.get('focus', '')
+        length = self.config.get('length', {})
+        
+        # 팀 가이드라인 적용
+        team_tone = self.team_guide.get('tone_guide', '')
+        team_style = self.team_guide.get('style_guide', '')
+        team_context = self.team_guide.get('team_context', '')
+        
+        system_content = f"""
+        다음 구조로 {self.comment_type} 분석 코멘트를 작성해주세요:
+        
+        구조: {', '.join(elements)}
+        톤: {tone}
+        초점: {focus}
+        길이: {length.get('target', 250)}±{length.get('tolerance', 30)}자
+        
+        팀 가이드라인:
+        - {team_tone}
+        - {team_style}
+        - {team_context}
+        
+        직원 이름 언급시 "이름(사번)님" 형태로 작성해주세요.
+        구체적 수치와 성과를 포함해주세요.
+        """
+        
+        # 코멘트 타입별 human content 생성
+        human_content = self._create_human_content(data)
+        
+        prompt = ChatPromptTemplate.from_messages([
+            SystemMessage(content=system_content),
+            HumanMessage(content=human_content)
+        ])
+        
+        return str(prompt.format())
+    
+    def _create_human_content(self, data: Dict) -> str:
+        """코멘트 타입별 human content 생성"""
+        if self.comment_type == "task":
+            return f"""
+            Task: {data.get('task_name', '')}
+            담당자: {data.get('emp_name', '')}({data.get('emp_no', '')})
+            목표: {data.get('target_level', '')}
+            누적 성과: {data.get('performance', '')}
+            달성률: {data.get('achievement_rate', 0)}%
+            기여도: {data.get('contribution_score', 0)}점
+            """
+        
+        elif self.comment_type == "individual":
+            return f"""
+            직원: {data.get('emp_name', '')}({data.get('emp_no', '')})
+            직위: {data.get('position', '')} (CL{data.get('cl', '')})
+            
+            Task 수행 현황:
+            {data.get('tasks_summary', '')}
+            
+            종합 성과:
+            - 평균 달성률: {data.get('avg_achievement', 0):.1f}%
+            - 평균 기여도: {data.get('avg_contribution', 0):.1f}점
+            - 참여 Task 수: {data.get('task_count', 0)}개
+            """
+        
+        elif self.comment_type == "team":
+            return f"""
+            팀 KPI 성과 현황:
+            {data.get('kpis_summary', '')}
+            
+            팀 전체 평균 달성률: {data.get('total_rate', 0):.1f}%
+            팀 구성: {data.get('team_context', '')}
+            성과 수준: {data.get('performance_level', '')}
+            """
+        
+        elif self.comment_type == "kpi":
+            return f"""
+            KPI: {data.get('kpi_name', '')}
+            KPI 목표: {data.get('kpi_description', '')}
+            
+            팀원별 개별 성과:
+            {data.get('tasks_text', '')}
+            """
+        
+        return str(data)
+    
+    def _call_llm_with_validation(self, prompt: str) -> str:
+        """LLM 호출 및 검증"""
+        def validate_comment(response: str) -> str:
+            response = response.strip()
+            
+            # 길이 검증
+            target_length = self.config.get('length', {}).get('target', 250)
+            tolerance = self.config.get('length', {}).get('tolerance', 30)
+            
+            if not (target_length - tolerance <= len(response) <= target_length + tolerance):
+                logger.warning(f"Comment length {len(response)} outside target {target_length}±{tolerance}")
+            
+            return response
+        
+        return robust_llm_call(prompt, validate_comment, context=f"{self.comment_type} comment")
+
+# ===== 서브모듈 5: 코멘트 생성 (개선된 버전) =====
+def comment_generation_submodule(state: Module2State) -> Module2State:
+    """코멘트 생성 서브모듈 - 통합 시스템 사용"""
+    print(f"   📝 코멘트 생성 중...")
+    
+    # 팀 일관성 가이드 생성
+    team_context_guide = generate_team_consistency_guide(state.team_id, state.period_id)
+    state.team_context_guide = team_context_guide
+    
+    # 통합 코멘트 생성기 사용
+    generate_task_comments_unified(state)
+    generate_individual_summary_comments_unified(state)
+    generate_team_overall_comment_unified(state)
+    
+    print(f"   ✅ 코멘트 생성 완료")
+    return state
+
+def generate_task_comments_unified(state: Module2State):
+    """Task별 코멘트 생성 (통합 시스템)"""
     period_type = "annual" if state.report_type == "annual" else "quarterly"
     
     for task_id in state.target_task_ids:
         task_data = fetch_cumulative_task_data(task_id, state.period_id)
         if not task_data:
             continue
-            
-        comment = generate_structured_task_comment(task_data, period_type, state.team_context_guide or {})
+        
+        # 통합 코멘트 생성기 사용
+        generator = CommentGenerator("task", period_type, state.team_context_guide)
+        comment = generator.generate(task_data)
         
         if task_data.get('task_summary_id'):
             update_task_summary(task_data['task_summary_id'], {
                 "ai_analysis_comment_task": comment
             })
 
-def generate_structured_task_comment(task_data: Dict, period_type: str, team_guide: Dict) -> str:
-    """구조화된 Task 코멘트 생성"""
-    
-    structure_config = {
-        "quarterly": {
-            "elements": ["성과요약", "주요포인트", "팀기여도", "개선방향"],
-            "tone": "건설적이고 격려적",
-            "focus": "다음 분기 개선"
-        },
-        "annual": {
-            "elements": ["연간요약", "성장추이", "팀기여도", "발전방향"],
-            "tone": "종합적이고 미래지향적", 
-            "focus": "내년 발전계획"
-        }
-    }
-    
-    config = structure_config[period_type]
-    
-    prompt = ChatPromptTemplate.from_messages([
-        SystemMessage(content=f"""
-        다음 구조로 Task 분석 코멘트를 작성해주세요:
-        
-        구조: {config['elements']}
-        톤: {config['tone']}
-        초점: {config['focus']}
-        길이: {team_guide['length_target']}±{team_guide['length_tolerance']}자
-        
-        팀 가이드라인:
-        - {team_guide['tone_guide']}
-        - {team_guide['style_guide']}
-        - {team_guide['team_context']}
-        
-        직원 이름 언급시 "이름(사번)님" 형태로 작성해주세요.
-        """),
-        HumanMessage(content=f"""
-        Task: {task_data.get('task_name', '')}
-        담당자: {task_data.get('emp_name', '')}({task_data.get('emp_no', '')})
-        목표: {task_data.get('target_level', '')}
-        누적 성과: {task_data.get('cumulative_performance', '')}
-        달성률: {task_data.get('ai_achievement_rate', 0)}%
-        기여도: {task_data.get('ai_contribution_score', 0)}점
-        """)
-    ])
-    
-    def validate_comment(response: str) -> str:
-        # 길이 검증
-        target_length = team_guide['length_target']
-        tolerance = team_guide['length_tolerance']
-        
-        if not (target_length - tolerance <= len(response) <= target_length + tolerance):
-            logger.warning(f"Comment length {len(response)} outside target {target_length}±{tolerance}")
-        
-        return response.strip()
-    
-    return robust_llm_call(str(prompt.format()), validate_comment, context="task comment")
-
-def generate_individual_summary_comments(state: Module2State):
-    """개인 종합 코멘트 생성"""
+def generate_individual_summary_comments_unified(state: Module2State):
+    """개인 종합 코멘트 생성 (통합 시스템)"""
     team_members = fetch_team_members(state.team_id)
+    period_type = "annual" if state.report_type == "annual" else "quarterly"
     
     for member in team_members:
         if member.get('role') == 'MANAGER':
             continue
-            
+        
         # 개인 Task 데이터 수집
         individual_tasks = []
         for task_id in state.target_task_ids:
@@ -1085,10 +1288,13 @@ def generate_individual_summary_comments(state: Module2State):
         
         if not individual_tasks:
             continue
-            
-        comment = generate_individual_summary_comment(
-            member, individual_tasks, state.report_type, state.team_context_guide or {}
-        )
+        
+        # 통합 코멘트 생성기 사용
+        generator = CommentGenerator("individual", period_type, state.team_context_guide)
+        comment = generator.generate({
+            **member,
+            "tasks": individual_tasks
+        })
         
         # 분기별/연말별 저장
         if state.report_type == "quarterly":
@@ -1100,7 +1306,6 @@ def generate_individual_summary_comments(state: Module2State):
             if state.feedback_report_ids is None:
                 state.feedback_report_ids = []
             state.feedback_report_ids.append(feedback_report_id)
-            
         else:  # annual
             final_report_id = save_final_evaluation_report(
                 member['emp_no'],
@@ -1111,71 +1316,8 @@ def generate_individual_summary_comments(state: Module2State):
                 state.final_evaluation_report_ids = []
             state.final_evaluation_report_ids.append(final_report_id)
 
-def generate_individual_summary_comment(member: Dict, tasks: List[Dict], report_type: str, team_guide: Dict) -> str:
-    """개인 종합 코멘트 생성"""
-    
-    period_config = {
-        "quarterly": {
-            "elements": ["전체성과요약", "주요성과하이라이트", "성장포인트", "다음분기가이드"],
-            "tone": "격려적이고 동기부여",
-            "length": "300-400자"
-        },
-        "annual": {
-            "elements": ["연간성과종합", "분기별성장추이", "핵심기여영역", "내년발전계획"],
-            "tone": "종합평가적이고 비전제시", 
-            "length": "400-500자"
-        }
-    }
-    
-    config = period_config[report_type]
-    
-    # Task 요약 정보 생성
-    tasks_summary = ""
-    total_achievement = 0
-    total_contribution = 0
-    
-    for task in tasks:
-        tasks_summary += f"- {task.get('task_name', '')}: 달성률 {task.get('ai_achievement_rate', 0)}%, 기여도 {task.get('ai_contribution_score', 0)}점\n"
-        total_achievement += task.get('ai_achievement_rate', 0)
-        total_contribution += task.get('ai_contribution_score', 0)
-    
-    avg_achievement = total_achievement / len(tasks) if tasks else 0
-    avg_contribution = total_contribution / len(tasks) if tasks else 0
-    
-    prompt = ChatPromptTemplate.from_messages([
-        SystemMessage(content=f"""
-        다음 구조로 개인 종합 성과 코멘트를 작성해주세요:
-        
-        구조: {config['elements']}
-        톤: {config['tone']}
-        길이: {config['length']}
-        
-        팀 가이드라인: {team_guide['tone_guide']}, {team_guide['style_guide']}
-        
-        직원 이름은 반드시 "이름(사번)님" 형태로 작성해주세요.
-        """),
-        HumanMessage(content=f"""
-        직원: {member.get('emp_name', '')}({member.get('emp_no', '')})
-        직위: {member.get('position', '')} (CL{member.get('cl', '')})
-        
-        Task 수행 현황:
-        {tasks_summary}
-        
-        종합 성과:
-        - 평균 달성률: {avg_achievement:.1f}%
-        - 평균 기여도: {avg_contribution:.1f}점
-        - 참여 Task 수: {len(tasks)}개
-        """)
-    ])
-    
-    def validate_individual_comment(response: str) -> str:
-        return response.strip()
-    
-    return robust_llm_call(str(prompt.format()), validate_individual_comment, context="individual summary")
-
-def generate_team_overall_comment(state: Module2State):
-    """팀 전체 분석 코멘트 생성"""
-    
+def generate_team_overall_comment_unified(state: Module2State):
+    """팀 전체 분석 코멘트 생성 (통합 시스템)"""
     # 팀 KPI 데이터 수집
     team_kpis_data = []
     for kpi_id in state.target_team_kpi_ids:
@@ -1183,70 +1325,20 @@ def generate_team_overall_comment(state: Module2State):
         if kpi_data:
             team_kpis_data.append(kpi_data)
     
-    comment = generate_team_analysis_comment(team_kpis_data, state.report_type, state.team_context_guide or {})
+    period_type = "annual" if state.report_type == "annual" else "quarterly"
+    
+    # 통합 코멘트 생성기 사용
+    generator = CommentGenerator("team", period_type, state.team_context_guide)
+    comment = generator.generate({
+        "kpis": team_kpis_data,
+        "team_context": state.team_context_guide.get('team_context', ''),
+        "performance_level": state.team_context_guide.get('performance_level', '')
+    })
     
     # team_evaluations 업데이트
     update_team_evaluations(state.team_evaluation_id or 0, {
         "ai_team_overall_analysis_comment": comment
     })
-
-def generate_team_analysis_comment(kpis_data: List[Dict], report_type: str, team_guide: Dict) -> str:
-    """팀 분석 코멘트 생성"""
-    
-    period_config = {
-        "quarterly": {
-            "elements": ["팀성과종합", "팀원기여분석", "주요성과영역", "팀운영개선점"],
-            "tone": "분석적이고 관리자 관점",
-            "length": "400-500자"
-        },
-        "annual": {
-            "elements": ["연간팀성과요약", "팀조직력평가", "핵심성과기여", "내년팀전략"],
-            "tone": "전략적이고 미래지향적",
-            "length": "500-600자"
-        }
-    }
-    
-    config = period_config[report_type]
-    
-    # KPI 요약 정보 생성
-    kpis_summary = ""
-    total_rate = 0
-    
-    for kpi in kpis_data:
-        rate = kpi.get('ai_kpi_progress_rate', 0)
-        kpis_summary += f"- {kpi.get('kpi_name', '')}: {rate}% (비중 {kpi.get('weight', 0)}%)\n"
-        total_rate += rate * (kpi.get('weight', 0) / 100)
-    
-    prompt = ChatPromptTemplate.from_messages([
-        SystemMessage(content=f"""
-        팀장 관점에서 다음 구조로 팀 전체 분석 코멘트를 작성해주세요:
-        
-        구조: {config['elements']}
-        톤: {config['tone']}
-        길이: {config['length']}
-        
-        관점: 팀 운영 및 관리자 시각
-        포함사항:
-        - 구체적 성과 수치
-        - 팀원별 기여도 분석
-        - 팀 운영상 강점/개선점
-        - 실행 가능한 개선 전략
-        """),
-        HumanMessage(content=f"""
-        팀 KPI 성과 현황:
-        {kpis_summary}
-        
-        팀 전체 평균 달성률: {total_rate:.1f}%
-        팀 구성: {team_guide.get('team_context', '')}
-        성과 수준: {team_guide.get('performance_level', '')}
-        """)
-    ])
-    
-    def validate_team_comment(response: str) -> str:
-        return response.strip()
-    
-    return robust_llm_call(str(prompt.format()), validate_team_comment, context="team analysis")
-
 
 # ===== 서브모듈 6: DB 업데이트 =====
 def db_update_submodule(state: Module2State) -> Module2State:
