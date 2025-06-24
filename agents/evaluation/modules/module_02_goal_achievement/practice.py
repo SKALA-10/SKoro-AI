@@ -111,7 +111,7 @@ def extract_number_from_response(response: str) -> float:
 def safe_divide(numerator: float, denominator: float, default: float = 0) -> float:
     """안전한 나누기"""
     if denominator == 0:
-        logger.warning(f"Division by zero: {numerator}/{denominator}, using default {default}")
+        print(f"   ⚠️  나누기 오류: {numerator}/{denominator}, 기본값 {default} 사용")
         return default
     return numerator / denominator
 
@@ -497,7 +497,7 @@ def parse_criteria_from_grade_rule(grade_rule: str) -> Optional[List[str]]:
 # ===== 서브모듈 1: 데이터 수집 =====
 def data_collection_submodule(state: Module2State) -> Module2State:
     """데이터 수집 서브모듈"""
-    logger.info(f"Starting data collection: team_id={state.team_id}, period_id={state.period_id}")
+    print(f"   📋 데이터 수집 중...")
     
     # team_evaluation_id 확인/생성
     team_evaluation_id = fetch_team_evaluation_id(state.team_id, state.period_id)
@@ -509,15 +509,15 @@ def data_collection_submodule(state: Module2State) -> Module2State:
     # evaluation_type 확인/설정
     for kpi_id in state.target_team_kpi_ids:
         evaluation_type = check_evaluation_type(kpi_id)
-        logger.info(f"KPI {kpi_id} evaluation_type: {evaluation_type}")
+        print(f"      • KPI {kpi_id}: {evaluation_type} 평가")
     
-    logger.info("Data collection completed")
+    print(f"   ✅ 데이터 수집 완료")
     return state
 
 # ===== 서브모듈 2: 달성률+등급 계산 =====
 def achievement_and_grade_calculation_submodule(state: Module2State) -> Module2State:
     """달성률+등급 계산 서브모듈 (통합) - 우리가 상의한 배치 처리"""
-    logger.info("Starting achievement and grade calculation")
+    print(f"   🎯 달성률 및 등급 계산 중...")
     
     updated_task_ids = []
     batch_data = []
@@ -561,7 +561,7 @@ def achievement_and_grade_calculation_submodule(state: Module2State) -> Module2S
                 updated_task_ids.append(task_data['task_id'])
     
     state.updated_task_ids = updated_task_ids
-    logger.info(f"Achievement calculation completed: {len(updated_task_ids)} tasks updated")
+    print(f"   ✅ 달성률 계산 완료: {len(updated_task_ids)}개 Task 업데이트")
     return state
 
 def batch_calculate_achievement_and_grades(batch_data: List[Dict], include_grades: bool) -> List[Dict]:
@@ -647,7 +647,7 @@ def batch_calculate_achievement_and_grades(batch_data: List[Dict], include_grade
             # 기본값으로 폴백
             fallback_results = []
             for _ in batch_data:
-                result = {"achievement_rate": 80.0}
+                result: Dict[str, Any] = {"achievement_rate": 80.0}
                 if include_grades:
                     result["grade"] = "C"
                 fallback_results.append(result)
@@ -658,7 +658,7 @@ def batch_calculate_achievement_and_grades(batch_data: List[Dict], include_grade
 # ===== 서브모듈 3: 기여도 계산 =====
 def contribution_calculation_submodule(state: Module2State) -> Module2State:
     """기여도 계산 서브모듈 - 우리가 상의한 하이브리드 방식"""
-    logger.info("Starting contribution calculation")
+    print(f"   ⚖️ 기여도 계산 중...")
     
     updated_task_ids = []
     kpi_contributions_by_emp = {}  # {emp_no: total_score}
@@ -714,7 +714,7 @@ def contribution_calculation_submodule(state: Module2State) -> Module2State:
             kpi_contributions_by_emp[emp_no] = round(percentage, 2)
     
     state.updated_task_ids = list(set((state.updated_task_ids or []) + updated_task_ids))
-    logger.info(f"Contribution calculation completed: {len(updated_task_ids)} tasks updated")
+    print(f"   ✅ 기여도 계산 완료: {len(updated_task_ids)}개 Task 업데이트")
     return state
 
 def calculate_quantitative_contributions(kpi_id: int, period_id: int) -> Dict[str, float]:
@@ -804,7 +804,7 @@ def calculate_qualitative_contributions(kpi_id: int, period_id: int, kpi_data: D
 # ===== 서브모듈 4: 팀 목표 분석 =====
 def team_analysis_submodule(state: Module2State) -> Module2State:
     """팀 목표 분석 서브모듈 - 우리가 상의한 LLM 기반"""
-    logger.info("Starting team analysis")
+    print(f"   🏢 팀 목표 분석 중...")
     
     updated_kpi_ids = []
     kpi_rates = []
@@ -847,10 +847,10 @@ def team_analysis_submodule(state: Module2State) -> Module2State:
             team_eval_data["year_over_year_growth"] = int(yoy_growth)
     
     if update_team_evaluations(state.team_evaluation_id or 0, team_eval_data):
-        logger.info(f"Team evaluations updated: average_rate={team_average_rate}")
+        print(f"      • 팀 평균 달성률: {team_average_rate:.1f}%")
     
     state.updated_team_kpi_ids = updated_kpi_ids
-    logger.info(f"Team analysis completed: {len(updated_kpi_ids)} KPIs updated")
+    print(f"   ✅ 팀 분석 완료: {len(updated_kpi_ids)}개 KPI 업데이트")
     return state
 
 def calculate_team_kpi_achievement_rate(kpi_id: int, period_id: int, kpi_data: Dict) -> Dict:
@@ -948,7 +948,7 @@ def calculate_year_over_year_growth(team_id: int, current_period_id: int, curren
 # ===== 서브모듈 5: 코멘트 생성 =====
 def comment_generation_submodule(state: Module2State) -> Module2State:
     """코멘트 생성 서브모듈 - 우리가 상의한 구조화 방식"""
-    logger.info("Starting comment generation")
+    print(f"   📝 코멘트 생성 중...")
     
     # 팀 일관성 가이드 생성
     team_context_guide = generate_team_consistency_guide(state.team_id, state.period_id)
@@ -963,7 +963,7 @@ def comment_generation_submodule(state: Module2State) -> Module2State:
     # 팀 전체 분석 코멘트 생성
     generate_team_overall_comment(state)
     
-    logger.info("Comment generation completed")
+    print(f"   ✅ 코멘트 생성 완료")
     return state
 
 def generate_team_consistency_guide(team_id: int, period_id: int) -> Dict:
@@ -1251,7 +1251,7 @@ def generate_team_analysis_comment(kpis_data: List[Dict], report_type: str, team
 # ===== 서브모듈 6: DB 업데이트 =====
 def db_update_submodule(state: Module2State) -> Module2State:
     """최종 DB 업데이트 서브모듈 - 트랜잭션 처리"""
-    logger.info("Starting final DB update")
+    print(f"   💾 최종 DB 업데이트 중...")
     
     try:
         with engine.begin() as transaction:
@@ -1277,28 +1277,26 @@ def db_update_submodule(state: Module2State) -> Module2State:
             updated_feedback_reports = len(state.feedback_report_ids or [])
             updated_final_reports = len(state.final_evaluation_report_ids or [])
             
-            logger.info(f"Final update summary:")
-            logger.info(f"  - Tasks updated: {updated_tasks}")
-            logger.info(f"  - KPIs updated: {updated_kpis}")
-            logger.info(f"  - Feedback reports: {updated_feedback_reports}")
-            logger.info(f"  - Final reports: {updated_final_reports}")
-            logger.info(f"  - Team evaluation: {state.team_evaluation_id}")
+            print(f"      • Task 업데이트: {updated_tasks}개")
+            print(f"      • KPI 업데이트: {updated_kpis}개")
+            print(f"      • 피드백 리포트: {updated_feedback_reports}개")
+            print(f"      • 최종 리포트: {updated_final_reports}개")
             
             # 5. 최종 상태 로깅
             if state.report_type == "quarterly":
-                logger.info("Quarterly evaluation completed successfully")
+                print(f"      • 분기 평가 완료")
             else:
-                logger.info("Annual evaluation completed successfully")
+                print(f"      • 연말 평가 완료")
                 
             return state
                 
     except Exception as e:
-        logger.error(f"Final DB update failed: {e}")
+        print(f"   ❌ 최종 DB 업데이트 실패: {e}")
         raise
 
 def update_quarterly_specific_data(state: Module2State):
     """분기별 전용 데이터 업데이트"""
-    logger.info("Updating quarterly specific data")
+    print(f"      📊 분기별 전용 데이터 업데이트 중...")
     
     # 1. 개인별 달성률 기준 순위 계산 및 업데이트
     team_members = fetch_team_members(state.team_id)
@@ -1350,11 +1348,11 @@ def update_quarterly_specific_data(state: Module2State):
             feedback_data
         )
     
-    logger.info(f"Updated quarterly rankings for {len(member_achievements)} members")
+    print(f"      ✅ 분기별 순위 업데이트 완료: {len(member_achievements)}명")
 
 def update_annual_specific_data(state: Module2State):
     """연말 전용 데이터 업데이트"""
-    logger.info("Updating annual specific data")
+    print(f"      📊 연말 전용 데이터 업데이트 중...")
     
     team_members = fetch_team_members(state.team_id)
     
@@ -1390,7 +1388,7 @@ def update_annual_specific_data(state: Module2State):
                 final_data
             )
     
-    logger.info(f"Updated annual data for {len([m for m in team_members if m.get('role') != 'MANAGER'])} members")
+    print(f"      ✅ 연말 데이터 업데이트 완료: {len([m for m in team_members if m.get('role') != 'MANAGER'])}명")
 
 def validate_final_update_results(state: Module2State) -> Dict[str, Any]:
     """최종 업데이트 결과 검증"""
@@ -1463,7 +1461,7 @@ def validate_final_update_results(state: Module2State) -> Dict[str, Any]:
         success = len(errors) == 0
         
         if warnings:
-            logger.warning(f"Validation warnings: {warnings}")
+            print(f"      ⚠️  검증 경고: {len(warnings)}건")
         
         return {
             'success': success,
@@ -1477,7 +1475,7 @@ def validate_final_update_results(state: Module2State) -> Dict[str, Any]:
         }
         
     except Exception as e:
-        logger.error(f"Validation process failed: {e}")
+        print(f"      ❌ 검증 프로세스 실패: {e}")
         return {
             'success': False,
             'errors': [f"Validation process error: {str(e)}"],
@@ -1540,7 +1538,12 @@ def execute_module2_pipeline(period_id: int, team_id: int) -> Dict[str, Any]:
     """모듈2 전체 파이프라인 실행 - 우리가 상의한 최종 구조"""
     
     start_time = datetime.now()
-    logger.info(f"Starting Module2 pipeline: period_id={period_id}, team_id={team_id}")
+    print(f"\n{'='*60}")
+    print(f"🚀 모듈2 목표달성도 분석 파이프라인 시작")
+    print(f"{'='*60}")
+    print(f"📍 설정 정보:")
+    print(f"   팀 ID: {team_id}")
+    print(f"   기간 ID: {period_id}")
     
     try:
         # 기본 정보 및 State 초기화
@@ -1579,21 +1582,25 @@ def execute_module2_pipeline(period_id: int, team_id: int) -> Dict[str, Any]:
             target_team_kpi_ids=target_team_kpi_ids
         )
         
+        print(f"   평가 유형: {state.report_type}")
+        print(f"   대상 Task: {len(target_task_ids)}개")
+        print(f"   대상 KPI: {len(target_team_kpi_ids)}개")
+        
         # 6단계 서브모듈 실행
-        logger.info("Step 1: Data Collection")
+        print(f"\n📊 1단계: 데이터 수집")
         state = data_collection_submodule(state)
         
-        logger.info("Step 2-4: Parallel Processing (Achievement, Contribution, Team Analysis)")
+        print(f"📊 2-4단계: 병렬 처리 (달성률, 기여도, 팀 분석)")
         # 실제 병렬 처리 구현시에는 concurrent.futures 등 사용
         # 여기서는 순차 실행으로 구현
         state = achievement_and_grade_calculation_submodule(state)
         state = contribution_calculation_submodule(state)
         state = team_analysis_submodule(state)
         
-        logger.info("Step 5: Comment Generation")
+        print(f"📊 5단계: 코멘트 생성")
         state = comment_generation_submodule(state)
         
-        logger.info("Step 6: Final DB Update")
+        print(f"📊 6단계: 최종 DB 업데이트")
         state = db_update_submodule(state)
         
         # 실행 결과 요약
@@ -1614,8 +1621,15 @@ def execute_module2_pipeline(period_id: int, team_id: int) -> Dict[str, Any]:
             }
         }
         
-        logger.info(f"Module2 pipeline completed successfully in {execution_time:.2f}s")
-        logger.info(f"Final result: {result}")
+        print(f"\n✅ 모듈2 파이프라인 성공 완료!")
+        print(f"⏱️  실행 시간: {execution_time:.2f}초")
+        print(f"📈 업데이트 결과:")
+        print(f"   • Task 업데이트: {result['updates']['tasks_updated']}개")
+        print(f"   • KPI 업데이트: {result['updates']['kpis_updated']}개")
+        print(f"   • 피드백 리포트: {result['updates']['feedback_reports']}개")
+        print(f"   • 최종 리포트: {result['updates']['final_reports']}개")
+        print(f"   • 팀 평가 ID: {result['updates']['team_evaluation_id']}")
+        print(f"{'='*60}")
         
         return result
         
@@ -1630,7 +1644,12 @@ def execute_module2_pipeline(period_id: int, team_id: int) -> Dict[str, Any]:
             "period_id": period_id
         }
         
-        logger.error(f"Module2 pipeline failed after {execution_time:.2f}s: {e}")
+        print(f"\n❌ 모듈2 파이프라인 실패!")
+        print(f"⏱️  실행 시간: {execution_time:.2f}초")
+        print(f"💥 오류: {e}")
+        print(f"🔍 오류 유형: {type(e).__name__}")
+        print(f"{'='*60}")
+        
         return error_result
 
 # ===== 테스트 및 실행 함수 =====
@@ -1639,12 +1658,27 @@ if __name__ == "__main__":
     test_period_id = 4  # Q4 (연말)
     test_team_id = 1
     
+    print(f"\n🧪 모듈2 테스트 실행")
+    print(f"   테스트 팀: {test_team_id}")
+    print(f"   테스트 기간: Q{test_period_id}")
+    
     try:
         result = execute_module2_pipeline(test_period_id, test_team_id)
-        print(f"\n=== Module2 Execution Result ===")
-        print(json.dumps(result, indent=2, ensure_ascii=False))
+        
+        if result.get('status') == 'success':
+            print(f"\n🎉 테스트 성공!")
+            print(f"📊 실행 결과 요약:")
+            print(f"   • 상태: {result['status']}")
+            print(f"   • 실행 시간: {result['execution_time_seconds']:.2f}초")
+            print(f"   • 평가 유형: {result['report_type']}")
+            print(f"   • 업데이트된 Task: {result['updates']['tasks_updated']}개")
+            print(f"   • 업데이트된 KPI: {result['updates']['kpis_updated']}개")
+        else:
+            print(f"\n❌ 테스트 실패!")
+            print(f"   • 오류: {result.get('error_message', 'Unknown error')}")
+            print(f"   • 오류 유형: {result.get('error_type', 'Unknown')}")
         
     except Exception as e:
-        print(f"Pipeline execution failed: {e}")
+        print(f"\n💥 테스트 실행 중 예외 발생: {e}")
         import traceback
         traceback.print_exc()
