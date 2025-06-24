@@ -2,68 +2,22 @@
 # db_utils.py - 데이터베이스 관련 유틸리티
 # ================================================================
 
+import sys
 import os
+current_dir = os.path.dirname(os.path.abspath(__file__))
+project_root = os.path.abspath(os.path.join(current_dir, '../../../../'))
+sys.path.append(project_root)
+
+from config.settings import DatabaseConfig
 import json
 from typing import Dict, List, Optional
 from sqlalchemy import create_engine, text
 from sqlalchemy.engine import Row
 from sqlalchemy.exc import OperationalError
-from dotenv import load_dotenv
 
-# .env 파일 로드 (쥬피터와 동일한 방식)
-load_dotenv("C:/Users/Administrator/Desktop/skala10/SKoro-AI/.env", override=True)
-
-# DB 연결 설정
-def setup_database_connection():
-    """데이터베이스 연결 설정"""
-    
-    print("=== 환경변수 확인 ===")
-    print(f"DB_TYPE: {os.getenv('DB_TYPE')}")
-    print(f"DB_USERNAME: {os.getenv('DB_USERNAME')}")
-    print(f"DB_PASSWORD: {os.getenv('DB_PASSWORD')}")
-    print(f"DB_HOST: {os.getenv('DB_HOST')}")
-    print(f"DB_PORT: {os.getenv('DB_PORT')}")
-    print(f"DB_NAME: {os.getenv('DB_NAME')}")
-    
-    db_type = os.getenv("DB_TYPE")
-    db_username = os.getenv("DB_USERNAME")
-    db_password = os.getenv("DB_PASSWORD")
-    db_host = os.getenv("DB_HOST")
-    db_port = os.getenv("DB_PORT")
-    db_name = os.getenv("DB_NAME")
-
-    # MariaDB/MySQL의 경우 mysql+pymysql 드라이버 사용
-    if db_type.lower() in ["mariadb", "mysql"]:
-        DATABASE_URL = (
-            f"mysql+pymysql://{db_username}:{db_password}@{db_host}:{db_port}/{db_name}"
-        )
-    else:
-        DATABASE_URL = (
-            f"{db_type}://{db_username}:{db_password}@{db_host}:{db_port}/{db_name}"
-        )
-
-    print(
-        f"Generated DATABASE_URL: mysql+pymysql://{db_username}:***@{db_host}:{db_port}/{db_name}"
-    )
-
-    # DB 엔진 생성
-    engine = create_engine(DATABASE_URL, pool_pre_ping=True)
-
-    # 연결 테스트
-    try:
-        with engine.connect() as connection:
-            print("✅ Database connection successful!")
-    except OperationalError as e:
-        print(f"❌ Database connection failed: {e}")
-        raise e
-    except Exception as e:
-        print(f"❌ Unexpected error: {e}")
-        raise e
-
-    return engine
-
-# 전역 엔진 인스턴스
-engine = setup_database_connection()
+db_config = DatabaseConfig()
+DATABASE_URL = db_config.DATABASE_URL
+engine = create_engine(DATABASE_URL, pool_pre_ping=True)
 
 def row_to_dict(row: Row) -> Dict:
     """SQLAlchemy Row 객체를 딕셔너리로 변환"""
@@ -217,6 +171,73 @@ def fetch_evaluation_criteria_from_db(prompt_type: str = "4p_evaluation") -> str
 # DB 저장 함수들
 # ================================================================
 
+def get_attitude_grade(average_score: float) -> str:
+    """4P 평균 점수로 태도 등급 산정"""
+    if average_score >= 4.5:
+        return "매우 우수"
+    elif average_score >= 4.0:
+        return "우수"
+    elif average_score >= 3.0:
+        return "보통"
+    elif average_score >= 2.0:
+        return "미흡"
+    else:
+        return "매우 미흡"
+
+
+def update_feedback_report_attitude(feedback_report_id: int, attitude: str) -> bool:
+    """feedback_reports.attitude 컬럼 업데이트 (없으면 컬럼 추가)"""
+    with engine.connect() as connection:
+        try:
+            query = text(
+                """
+                UPDATE feedback_reports
+                SET attitude = :attitude
+                WHERE feedback_report_id = :feedback_report_id
+                """
+            )
+            result = connection.execute(
+                query,
+                {
+                    "feedback_report_id": feedback_report_id,
+                    "attitude": attitude,
+                },
+            )
+            connection.commit()
+            return result.rowcount > 0
+        except Exception as e:
+            print(f"attitude 업데이트 오류: {e}")
+            # 컬럼이 없다면 추가 시도
+            try:
+                connection.execute(
+                    text(
+                        "ALTER TABLE feedback_reports ADD COLUMN attitude VARCHAR(20)"
+                    )
+                )
+                connection.commit()
+                print("attitude 컬럼 추가됨")
+                # 다시 저장 시도
+                query = text(
+                    """
+                    UPDATE feedback_reports
+                    SET attitude = :attitude
+                    WHERE feedback_report_id = :feedback_report_id
+                    """
+                )
+                result = connection.execute(
+                    query,
+                    {
+                        "feedback_report_id": feedback_report_id,
+                        "attitude": attitude,
+                    },
+                )
+                connection.commit()
+                return result.rowcount > 0
+            except Exception as e2:
+                print(f"attitude 컬럼 추가 실패: {e2}")
+                return False
+
+
 def save_quarterly_4p_results(feedback_report_id: int, integrated_result: Dict) -> bool:
     """분기 4P 결과를 feedback_reports 테이블에 저장"""
 
@@ -281,8 +302,12 @@ def save_quarterly_4p_results(feedback_report_id: int, integrated_result: Dict) 
                 },
             )
             connection.commit()
-            return result.rowcount > 0
-
+            # 4P 저장 성공 시 attitude 등급도 업데이트
+            if result.rowcount > 0:
+                attitude = get_attitude_grade(integrated_result["average_score"])
+                update_feedback_report_attitude(feedback_report_id, attitude)
+                return True
+            return False
         except Exception as e:
             print(f"분기 저장 오류: {e}")
             # 컬럼이 없다면 추가 시도
