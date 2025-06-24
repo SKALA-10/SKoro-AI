@@ -145,6 +145,7 @@ if __name__ == "__main__":
     # quick_module4_analysis("E002", 3)
     
     # # 분기 전체 분석
+    # run_module4_period_analysis(2)
     run_module4_period_analysis(4)
     
     print("\n🎉 모듈 4 실행 스크립트 로드 완료!")

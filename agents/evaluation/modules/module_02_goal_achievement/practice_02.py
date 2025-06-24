@@ -1923,30 +1923,33 @@ def execute_module2_pipeline(period_id: int, team_id: int) -> Dict[str, Any]:
 # ===== 테스트 및 실행 함수 =====
 if __name__ == "__main__":
     # 테스트 실행
-    test_period_id = 4  # Q4 (연말)
-    test_team_id = 1
-    
-    print(f"\n🧪 모듈2 테스트 실행")
-    print(f"   테스트 팀: {test_team_id}")
-    print(f"   테스트 기간: Q{test_period_id}")
-    
-    try:
-        result = execute_module2_pipeline(test_period_id, test_team_id)
+    test_cases = [
+        # {"period_id": 4, "team_id": 1, "desc": "Q4 (연말)"},
+        {"period_id": 2, "team_id": 1, "desc": "Q2 (2분기)"}
+    ]
+
+    for test in test_cases:
+        print(f"\n🧪 모듈2 테스트 실행 - {test['desc']}")
+        print(f"   테스트 팀: {test['team_id']}")
+        print(f"   테스트 기간: Q{test['period_id']}")
         
-        if result.get('status') == 'success':
-            print(f"\n🎉 테스트 성공!")
-            print(f"📊 실행 결과 요약:")
-            print(f"   • 상태: {result['status']}")
-            print(f"   • 실행 시간: {result['execution_time_seconds']:.2f}초")
-            print(f"   • 평가 유형: {result['report_type']}")
-            print(f"   • 업데이트된 Task: {result['updates']['tasks_updated']}개")
-            print(f"   • 업데이트된 KPI: {result['updates']['kpis_updated']}개")
-        else:
-            print(f"\n❌ 테스트 실패!")
-            print(f"   • 오류: {result.get('error_message', 'Unknown error')}")
-            print(f"   • 오류 유형: {result.get('error_type', 'Unknown')}")
-        
-    except Exception as e:
-        print(f"\n💥 테스트 실행 중 예외 발생: {e}")
-        import traceback
-        traceback.print_exc()
+        try:
+            result = execute_module2_pipeline(test['period_id'], test['team_id'])
+            
+            if result.get('status') == 'success':
+                print(f"\n🎉 테스트 성공!")
+                print(f"📊 실행 결과 요약:")
+                print(f"   • 상태: {result['status']}")
+                print(f"   • 실행 시간: {result['execution_time_seconds']:.2f}초")
+                print(f"   • 평가 유형: {result['report_type']}")
+                print(f"   • 업데이트된 Task: {result['updates']['tasks_updated']}개")
+                print(f"   • 업데이트된 KPI: {result['updates']['kpis_updated']}개")
+            else:
+                print(f"\n❌ 테스트 실패!")
+                print(f"   • 오류: {result.get('error_message', 'Unknown error')}")
+                print(f"   • 오류 유형: {result.get('error_type', 'Unknown')}")
+            
+        except Exception as e:
+            print(f"\n💥 테스트 실행 중 예외 발생: {e}")
+            import traceback
+            traceback.print_exc()

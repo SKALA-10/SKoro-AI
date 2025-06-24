@@ -939,54 +939,54 @@ def create_module3_graph():
 
 
 
-# %%
-# 실행 함수
-def run_module3_quarterly():
-    """모듈 3 분기별 실행"""
+# # %%
+# # 실행 함수
+# def run_module3_quarterly():
+#     """모듈 3 분기별 실행"""
     
-    # State 정의 (딕셔너리로 생성)
-    state = {
-        "messages": [HumanMessage(content="모듈 3 협업 분석 시작")],
-        "report_type": "quarterly",
-        "team_id": 1,
-        "period_id": 2,
-        "target_task_summary_ids": [1, 5, 9, 13, 17, 21, 25, 29, 2, 6, 10, 14, 18, 22, 26, 30],
-        "target_team_kpi_ids": [1, 2, 3],
-        "team_evaluation_id": 101,
-        "collaboration_relationships": [],
-        "individual_collaboration_analysis": {},
-        "team_collaboration_matrix": {}
-    }
+#     # State 정의 (딕셔너리로 생성)
+#     state = {
+#         "messages": [HumanMessage(content="모듈 3 협업 분석 시작")],
+#         "report_type": "quarterly",
+#         "team_id": 1,
+#         "period_id": 2,
+#         "target_task_summary_ids": [1, 5, 9, 13, 17, 21, 25, 29, 2, 6, 10, 14, 18, 22, 26, 30],
+#         "target_team_kpi_ids": [1, 2, 3],
+#         "team_evaluation_id": 101,
+#         "collaboration_relationships": [],
+#         "individual_collaboration_analysis": {},
+#         "team_collaboration_matrix": {}
+#     }
 
-    # 그래프 생성 및 실행
-    print("모듈 3 실행 시작...")
-    module3_graph = create_module3_graph()
-    result = module3_graph.invoke(state)
-    print("모듈 3 실행 완료!")
+#     # 그래프 생성 및 실행
+#     print("모듈 3 실행 시작...")
+#     module3_graph = create_module3_graph()
+#     result = module3_graph.invoke(state)
+#     print("모듈 3 실행 완료!")
     
-    # 결과 출력
-    for message in result['messages']:
-        print(f"- {message.content}")
+#     # 결과 출력
+#     for message in result['messages']:
+#         print(f"- {message.content}")
     
-    # 최종 협업 매트릭스 확인
-    if result.get('team_collaboration_matrix'):
-        print("\n=== 생성된 협업 매트릭스 ===")
-        matrix = result['team_collaboration_matrix']
-        print(f"팀 요약: {matrix['team_summary']}")
-        print(f"분석 인원: {matrix['total_members']}명")
-        print(f"평균 협업률: {matrix['avg_collaboration_rate']}%")
-        print(f"평균 기여도: {matrix['avg_contribution_score']}점")
+#     # 최종 협업 매트릭스 확인
+#     if result.get('team_collaboration_matrix'):
+#         print("\n=== 생성된 협업 매트릭스 ===")
+#         matrix = result['team_collaboration_matrix']
+#         print(f"팀 요약: {matrix['team_summary']}")
+#         print(f"분석 인원: {matrix['total_members']}명")
+#         print(f"평균 협업률: {matrix['avg_collaboration_rate']}%")
+#         print(f"평균 기여도: {matrix['avg_contribution_score']}점")
         
-        print("\n팀원별 협업 분석:")
-        for member in matrix['collaboration_matrix']:
-            print(f"- {member['name']}: {member['team_role']}, 협업률 {member['collaboration_rate']}%, 기여도 {member['avg_contribution_score']}점")
+#         print("\n팀원별 협업 분석:")
+#         for member in matrix['collaboration_matrix']:
+#             print(f"- {member['name']}: {member['team_role']}, 협업률 {member['collaboration_rate']}%, 기여도 {member['avg_contribution_score']}점")
     
-    return result
+#     return result
 
-# %%
-# 테스트 실행
-if __name__ == "__main__":
-    result = run_module3_quarterly()
+# # %%
+# # 테스트 실행
+# if __name__ == "__main__":
+#     result = run_module3_quarterly()
 
 
 # 연말 실행 함수
@@ -1013,3 +1013,42 @@ def run_module3_annual():
 # 실행
 if __name__ == "__main__":
     result = run_module3_annual()
+
+
+def run_module3_quarterly_q2():
+    """모듈 3 2분기(2024년 2분기) 실행"""
+    
+    # State 정의 (딕셔너리로 생성)
+    state = {
+        "messages": [HumanMessage(content="모듈 3 협업 분석 시작 (2분기)")],
+        "report_type": "quarterly",
+        "team_id": 1,
+        "period_id": 2,  # 2분기
+        "target_task_summary_ids": [2, 6, 10, 14, 18, 22, 26, 30],  # 2분기 task_summary_id만 추출
+        "target_team_kpi_ids": [1, 2, 3],  # 필요시 조정
+        "team_evaluation_id": 102,  # 2분기 team_evaluation_id
+        "collaboration_relationships": [],
+        "individual_collaboration_analysis": {},
+        "team_collaboration_matrix": {}
+    }
+
+    # 그래프 생성 및 실행
+    print("모듈 3 2분기 실행 시작...")
+    module3_graph = create_module3_graph()
+    result = module3_graph.invoke(state)
+    print("모듈 3 2분기 실행 완료!")
+    
+    # 결과 출력
+    for message in result['messages']:
+        print(f"- {message.content}")
+    
+    # 최종 협업 매트릭스 확인
+    if result.get('team_collaboration_matrix'):
+        print("\n=== 생성된 협업 매트릭스 ===")
+        matrix = result['team_collaboration_matrix']
+        print(f"팀 요약: {matrix['team_summary']}")
+        print(f"분석 인원: {matrix['total_members']}명")
+        print(f"평균 협업률: {matrix['avg_collaboration_rate']}%")
+        print(f"평균 기여도: {matrix['avg_contribution_score']}점")
+
+run_module3_quarterly_q2()
