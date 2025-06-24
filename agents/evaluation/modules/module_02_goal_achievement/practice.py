@@ -584,6 +584,7 @@ def batch_calculate_achievement_and_grades(batch_data: List[Dict], include_grade
             - 달성률: 목표 대비 실제 성과 (100% = 목표 달성, 100% 초과 = 목표 초과)
             - 등급: S(초과달성), A(완전달성), B(양호), C(미흡), D(불량)
             
+            현재 성과를 객관적으로 평가해주세요.
             JSON 형식으로 응답해주세요.
             """),
             HumanMessage(content=f"""
@@ -604,6 +605,7 @@ def batch_calculate_achievement_and_grades(batch_data: List[Dict], include_grade
             다음 Task들의 달성률(0-200%)을 계산해주세요.
             
             달성률 기준: 목표 대비 실제 성과 (100% = 목표 달성)
+            현재 성과를 객관적으로 평가해주세요.
             """),
             HumanMessage(content=f"""
             {tasks_text}
@@ -771,6 +773,7 @@ def calculate_qualitative_contributions(kpi_id: int, period_id: int, kpi_data: D
         {criteria_text}
         
         모든 팀원의 기여도 합계는 정확히 100%가 되어야 합니다.
+        현재 성과와 기여도를 객관적으로 분석해주세요.
         """),
         HumanMessage(content=f"""
         KPI: {kpi_data.get('kpi_name', '')}
@@ -786,7 +789,7 @@ def calculate_qualitative_contributions(kpi_id: int, period_id: int, kpi_data: D
             "{emp_nos[0] if emp_nos else 'EMP001'}": [기여도 0-100%],
             "{emp_nos[1] if len(emp_nos) > 1 else 'EMP002'}": [기여도 0-100%]
           }},
-          "kpi_analysis_comment": "[분석 코멘트]"
+          "kpi_analysis_comment": "[현재 상태 분석 코멘트]"
         }}
         """)
     ])
@@ -866,7 +869,7 @@ def calculate_team_kpi_achievement_rate(kpi_id: int, period_id: int, kpi_data: D
     prompt = ChatPromptTemplate.from_messages([
         SystemMessage(content="""
         팀 KPI의 전체 달성률을 0-200% 범위로 계산해주세요.
-        개별 팀원들의 성과를 종합하여 팀 전체의 목표 달성 수준을 판단해주세요.
+        개별 팀원들의 성과를 종합하여 팀 전체의 현재 목표 달성 수준을 객관적으로 판단해주세요.
         """),
         HumanMessage(content=f"""
         KPI: {kpi_data.get('kpi_name', '')}
@@ -878,7 +881,7 @@ def calculate_team_kpi_achievement_rate(kpi_id: int, period_id: int, kpi_data: D
         JSON 답변:
         {{
           "kpi_overall_rate": [팀 KPI 달성률 0-200%],
-          "kpi_analysis_comment": "[KPI 분석 코멘트]"
+          "kpi_analysis_comment": "[현재 KPI 달성 상태 분석]"
         }}
         """)
     ])
@@ -894,7 +897,7 @@ def calculate_team_kpi_achievement_rate(kpi_id: int, period_id: int, kpi_data: D
                 
             return {
                 "rate": round(float(rate), 2),
-                "comment": data.get("kpi_analysis_comment", "분석 코멘트 생성 실패")
+                "comment": data.get("kpi_analysis_comment", "현재 상태 분석 실패")
             }
         except Exception as e:
             return {"rate": 80.0, "comment": f"KPI 분석 실패: {str(e)[:100]}"}
@@ -960,12 +963,12 @@ def generate_team_consistency_guide(team_id: int, period_id: int) -> Dict:
         style_guide = "전문적이고 객관적"
     elif team_avg_rate >= 70:
         performance_level = "average"
-        tone_guide = "균형적, 성장 가능성 강조"
-        style_guide = "건설적이고 격려적"
+        tone_guide = "균형적, 현재 성과 분석"
+        style_guide = "객관적이고 분석적"
     else:
         performance_level = "improvement_needed"
-        tone_guide = "개선 중심, 실행 방안 제시"
-        style_guide = "지원적이고 구체적"
+        tone_guide = "현재 상태 분석, 성과 요약"
+        style_guide = "객관적이고 구체적"
     
     return {
         "performance_level": performance_level,
@@ -980,7 +983,7 @@ def generate_team_consistency_guide(team_id: int, period_id: int) -> Dict:
 class CommentGenerator:
     """통합 코멘트 생성 시스템 - 일관성 있는 코멘트 생성"""
     
-    def __init__(self, comment_type: str, period_type: str, team_guide: Dict = None):
+    def __init__(self, comment_type: str, period_type: str, team_guide: Optional[Dict] = None):
         self.comment_type = comment_type  # "task", "individual", "team", "kpi"
         self.period_type = period_type    # "quarterly", "annual"
         self.team_guide = team_guide or {}
@@ -991,51 +994,51 @@ class CommentGenerator:
         base_configs = {
             "task": {
                 "quarterly": {
-                    "elements": ["성과요약", "주요포인트", "팀기여도", "개선방향"],
-                    "tone": "건설적이고 격려적",
-                    "focus": "다음 분기 개선",
+                    "elements": ["성과요약", "주요포인트", "팀기여도", "현재상태분석"],
+                    "tone": "객관적이고 분석적",
+                    "focus": "현재 성과와 기여도 분석",
                     "length": {"target": 250, "tolerance": 30}
                 },
                 "annual": {
-                    "elements": ["연간요약", "성장추이", "팀기여도", "발전방향"],
-                    "tone": "종합적이고 미래지향적",
-                    "focus": "내년 발전계획",
+                    "elements": ["연간요약", "성장추이", "팀기여도", "종합평가"],
+                    "tone": "종합적이고 객관적",
+                    "focus": "연간 성과와 성장 분석",
                     "length": {"target": 300, "tolerance": 40}
                 }
             },
             "individual": {
                 "quarterly": {
-                    "elements": ["전체성과요약", "주요성과하이라이트", "성장포인트", "다음분기가이드"],
-                    "tone": "격려적이고 동기부여",
+                    "elements": ["전체성과요약", "주요성과하이라이트", "성장포인트", "현재역량평가"],
+                    "tone": "객관적이고 분석적",
                     "length": {"target": 350, "tolerance": 50}
                 },
                 "annual": {
-                    "elements": ["연간성과종합", "분기별성장추이", "핵심기여영역", "내년발전계획"],
-                    "tone": "종합평가적이고 비전제시",
+                    "elements": ["연간성과종합", "분기별성장추이", "핵심기여영역", "종합역량평가"],
+                    "tone": "종합평가적이고 객관적",
                     "length": {"target": 450, "tolerance": 50}
                 }
             },
             "team": {
                 "quarterly": {
-                    "elements": ["팀성과종합", "팀원기여분석", "주요성과영역", "팀운영개선점"],
-                    "tone": "분석적이고 관리자 관점",
+                    "elements": ["팀성과종합", "팀원기여분석", "주요성과영역", "팀현재상태"],
+                    "tone": "분석적이고 객관적",
                     "length": {"target": 450, "tolerance": 50}
                 },
                 "annual": {
-                    "elements": ["연간팀성과요약", "팀조직력평가", "핵심성과기여", "내년팀전략"],
-                    "tone": "전략적이고 미래지향적",
+                    "elements": ["연간팀성과요약", "팀조직력평가", "핵심성과기여", "팀종합평가"],
+                    "tone": "종합적이고 객관적",
                     "length": {"target": 550, "tolerance": 50}
                 }
             },
             "kpi": {
                 "quarterly": {
-                    "elements": ["KPI달성현황", "주요성과분석", "팀기여도평가", "개선방향"],
+                    "elements": ["KPI달성현황", "주요성과분석", "팀기여도평가", "현재달성수준"],
                     "tone": "객관적이고 분석적",
                     "length": {"target": 200, "tolerance": 30}
                 },
                 "annual": {
-                    "elements": ["연간KPI종합", "성과추이분석", "팀기여도평가", "내년계획"],
-                    "tone": "종합적이고 전략적",
+                    "elements": ["연간KPI종합", "성과추이분석", "팀기여도평가", "종합달성평가"],
+                    "tone": "종합적이고 객관적",
                     "length": {"target": 250, "tolerance": 30}
                 }
             }
@@ -1043,7 +1046,7 @@ class CommentGenerator:
         
         return base_configs.get(self.comment_type, {}).get(self.period_type, {})
     
-    def generate(self, data: Dict, context: Dict = None) -> str:
+    def generate(self, data: Dict, context: Optional[Dict] = None) -> str:
         """통합 코멘트 생성 메인 함수"""
         if not self.config:
             raise ValueError(f"Invalid comment type: {self.comment_type} or period type: {self.period_type}")
@@ -1146,9 +1149,9 @@ class CommentGenerator:
         team_context = self.team_guide.get('team_context', '')
         
         system_content = f"""
-        다음 구조로 {self.comment_type} 분석 코멘트를 작성해주세요:
+        다음 내용을 포함하여 {self.comment_type} 분석 코멘트를 하나의 자연스러운 문단으로 작성해주세요:
         
-        구조: {', '.join(elements)}
+        포함할 내용: {', '.join(elements)}
         톤: {tone}
         초점: {focus}
         길이: {length.get('target', 250)}±{length.get('tolerance', 30)}자
@@ -1158,8 +1161,14 @@ class CommentGenerator:
         - {team_style}
         - {team_context}
         
-        직원 이름 언급시 "이름(사번)님" 형태로 작성해주세요.
-        구체적 수치와 성과를 포함해주세요.
+        작성 원칙:
+        1. 현재 상태와 과거 성장 추이에 집중
+        2. 구체적 수치와 성과를 포함
+        3. 미래 계획이나 제안은 포함하지 않음
+        4. 객관적이고 팩트 기반으로 작성
+        5. 직원 이름 언급시 "이름(사번)님" 형태로 작성
+        6. "연간요약:", "팀기여도:" 등의 제목 없이 하나의 자연스러운 문단으로 작성
+        7. 문단 간 자연스러운 연결로 전체적인 흐름을 만들어주세요
         """
         
         # 코멘트 타입별 human content 생성
@@ -1331,8 +1340,8 @@ def generate_team_overall_comment_unified(state: Module2State):
     generator = CommentGenerator("team", period_type, state.team_context_guide)
     comment = generator.generate({
         "kpis": team_kpis_data,
-        "team_context": state.team_context_guide.get('team_context', ''),
-        "performance_level": state.team_context_guide.get('performance_level', '')
+        "team_context": state.team_context_guide.get('team_context', '') if state.team_context_guide else '',
+        "performance_level": state.team_context_guide.get('performance_level', '') if state.team_context_guide else ''
     })
     
     # team_evaluations 업데이트
