@@ -27,21 +27,24 @@ from functools import lru_cache
 from datetime import datetime
 
 # 환경 설정
-from dotenv import load_dotenv
+current_dir = os.path.dirname(os.path.abspath(__file__))
+project_root = os.path.abspath(os.path.join(current_dir, '../../../../'))  # 4단계로 수정
+sys.path.append(project_root)
+
+from config.settings import DatabaseConfig
 from langchain_openai import ChatOpenAI
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.messages import SystemMessage, HumanMessage
 from sqlalchemy import create_engine, text
 from sqlalchemy.engine import Row
 
-load_dotenv()
-
 # 로깅 설정
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # DB 및 LLM 설정
-DATABASE_URL = os.getenv("DATABASE_URL", "mysql://user:password@localhost/db")
+db_config = DatabaseConfig()
+DATABASE_URL = db_config.DATABASE_URL
 engine = create_engine(DATABASE_URL, pool_pre_ping=True)
 llm_client = ChatOpenAI(model="gpt-4o-mini", temperature=0)
 
@@ -531,7 +534,7 @@ def achievement_and_grade_calculation_submodule(state: Module2State) -> Module2S
             "target_level": task_data.get('target_level', ''),
             "cumulative_performance": task_data.get('cumulative_performance', ''),
             "cumulative_summary": task_data.get('cumulative_task_summary', ''),
-            "kpi_data": fetch_team_kpi_data(task_data.get('team_kpi_id'))
+            "kpi_data": fetch_team_kpi_data(task_data.get('team_kpi_id') or 0)
         })
     
     # 배치 처리 (15개씩)
@@ -627,13 +630,13 @@ def batch_calculate_achievement_and_grades(batch_data: List[Dict], include_grade
                 if not isinstance(rate, (int, float)) or not (0 <= rate <= 200):
                     rate = 80.0  # 기본값
                 
-                validated_result = {"achievement_rate": round(float(rate), 2)}
+                validated_result: Dict[str, Any] = {"achievement_rate": round(float(rate), 2)}
                 
                 if include_grades:
                     grade = result.get("grade", "C")
                     if grade not in ["S", "A", "B", "C", "D"]:
                         grade = "C"
-                    validated_result["grade"] = grade
+                    validated_result["grade"] = str(grade)
                 
                 validated_results.append(validated_result)
             
@@ -707,7 +710,7 @@ def contribution_calculation_submodule(state: Module2State) -> Module2State:
     total_team_score = sum(kpi_contributions_by_emp.values())
     if total_team_score > 0:
         for emp_no in kpi_contributions_by_emp:
-            percentage = (kip_contributions_by_emp[emp_no] / total_team_score) * 100
+            percentage = (kpi_contributions_by_emp[emp_no] / total_team_score) * 100
             kpi_contributions_by_emp[emp_no] = round(percentage, 2)
     
     state.updated_task_ids = list(set((state.updated_task_ids or []) + updated_task_ids))
@@ -843,7 +846,7 @@ def team_analysis_submodule(state: Module2State) -> Module2State:
         if yoy_growth is not None:
             team_eval_data["year_over_year_growth"] = int(yoy_growth)
     
-    if update_team_evaluations(state.team_evaluation_id, team_eval_data):
+    if update_team_evaluations(state.team_evaluation_id or 0, team_eval_data):
         logger.info(f"Team evaluations updated: average_rate={team_average_rate}")
     
     state.updated_team_kpi_ids = updated_kpi_ids
@@ -1002,7 +1005,7 @@ def generate_task_comments(state: Module2State):
         if not task_data:
             continue
             
-        comment = generate_structured_task_comment(task_data, period_type, state.team_context_guide)
+        comment = generate_structured_task_comment(task_data, period_type, state.team_context_guide or {})
         
         if task_data.get('task_summary_id'):
             update_task_summary(task_data['task_summary_id'], {
@@ -1084,14 +1087,14 @@ def generate_individual_summary_comments(state: Module2State):
             continue
             
         comment = generate_individual_summary_comment(
-            member, individual_tasks, state.report_type, state.team_context_guide
+            member, individual_tasks, state.report_type, state.team_context_guide or {}
         )
         
         # 분기별/연말별 저장
         if state.report_type == "quarterly":
             feedback_report_id = save_feedback_report(
                 member['emp_no'], 
-                state.team_evaluation_id,
+                state.team_evaluation_id or 0,
                 {"ai_overall_contribution_summary_comment": comment}
             )
             if state.feedback_report_ids is None:
@@ -1101,7 +1104,7 @@ def generate_individual_summary_comments(state: Module2State):
         else:  # annual
             final_report_id = save_final_evaluation_report(
                 member['emp_no'],
-                state.team_evaluation_id, 
+                state.team_evaluation_id or 0, 
                 {"ai_annual_performance_summary_comment": comment}
             )
             if state.final_evaluation_report_ids is None:
@@ -1180,10 +1183,10 @@ def generate_team_overall_comment(state: Module2State):
         if kpi_data:
             team_kpis_data.append(kpi_data)
     
-    comment = generate_team_analysis_comment(team_kpis_data, state.report_type, state.team_context_guide)
+    comment = generate_team_analysis_comment(team_kpis_data, state.report_type, state.team_context_guide or {})
     
     # team_evaluations 업데이트
-    update_team_evaluations(state.team_evaluation_id, {
+    update_team_evaluations(state.team_evaluation_id or 0, {
         "ai_team_overall_analysis_comment": comment
     })
 
@@ -1343,7 +1346,7 @@ def update_quarterly_specific_data(state: Module2State):
         
         save_feedback_report(
             member_data['emp_no'],
-            state.team_evaluation_id,
+            state.team_evaluation_id or 0,
             feedback_data
         )
     
@@ -1383,7 +1386,7 @@ def update_annual_specific_data(state: Module2State):
             
             save_final_evaluation_report(
                 member['emp_no'],
-                state.team_evaluation_id,
+                state.team_evaluation_id or 0,
                 final_data
             )
     
@@ -1433,7 +1436,8 @@ def validate_final_update_results(state: Module2State) -> Dict[str, Any]:
                     WHERE team_evaluation_id = :team_evaluation_id
                 """)
                 result = connection.execute(query, {"team_evaluation_id": state.team_evaluation_id})
-                team_eval = row_to_dict(result.fetchone()) if result.rowcount > 0 else {}
+                row = result.fetchone()
+                team_eval = row_to_dict(row) if row else {}
                 
                 if team_eval.get('average_achievement_rate') is None:
                     errors.append("Team evaluation: average_achievement_rate not updated")
@@ -1544,7 +1548,8 @@ def execute_module2_pipeline(period_id: int, team_id: int) -> Dict[str, Any]:
             # period 정보 조회
             period_query = text("SELECT * FROM periods WHERE period_id = :period_id")
             period_result = connection.execute(period_query, {"period_id": period_id})
-            period_data = row_to_dict(period_result.fetchone())
+            period_row = period_result.fetchone()
+            period_data = row_to_dict(period_row) if period_row else {}
             
             if not period_data:
                 raise DataIntegrityError(f"Period {period_id} not found")
