@@ -112,9 +112,23 @@ def fetch_peer_talk_data(emp_no: str, period_id: int) -> Dict:
         ).fetchone()
 
         if result and result.ai_peer_talk_summary:
-            return {"peer_talk_summary": result.ai_peer_talk_summary}
+            try:
+                # JSON 파싱 시도
+                summary_json = json.loads(result.ai_peer_talk_summary)
+                return {
+                    "strengths": summary_json.get("strengths", ""),
+                    "concerns": summary_json.get("concerns", ""),
+                    "collaboration_observations": summary_json.get("collaboration_observations", "")
+                }
+            except Exception:
+                # 파싱 실패 시 기존 방식 fallback
+                return {"peer_talk_summary": result.ai_peer_talk_summary}
 
-        return {"peer_talk_summary": "동료평가 데이터 없음"}
+        return {
+            "strengths": "",
+            "concerns": "",
+            "collaboration_observations": ""
+        }
 
 
 def fetch_collaboration_matrix_data(emp_no: str, team_id: int, period_id: int) -> Dict:

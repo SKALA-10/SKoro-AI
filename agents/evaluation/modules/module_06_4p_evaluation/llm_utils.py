@@ -453,8 +453,17 @@ def call_llm_for_people_evaluation(
     else:
         collaboration_info = "협업 데이터 없음"
 
-    # Peer Talk 데이터
-    peer_talk_summary = peer_talk_data.get("peer_talk_summary", "동료평가 없음")
+    # Peer Talk 데이터 (JSON 구조 반영)
+    strengths = peer_talk_data.get("strengths", "")
+    concerns = peer_talk_data.get("concerns", "")
+    collaboration_observations = peer_talk_data.get("collaboration_observations", "")
+
+    peer_talk_section = f"""
+    [동료 피드백 요약]
+    - 강점: {strengths if strengths else '정보 없음'}
+    - 우려/개선점: {concerns if concerns else '정보 없음'}
+    - 협업 관찰: {collaboration_observations if collaboration_observations else '정보 없음'}
+    """
 
     # Task 데이터에서 협업 관련 내용 추출
     collaboration_tasks = ""
@@ -489,9 +498,7 @@ def call_llm_for_people_evaluation(
     {collaboration_info}
     </협업 데이터>
 
-    <동료평가 데이터>
-    {peer_talk_summary}
-    </동료평가 데이터>
+    {peer_talk_section}
 
     <협업 관련 업무>
     {collaboration_tasks if collaboration_tasks else '협업 관련 업무 데이터 없음'}
