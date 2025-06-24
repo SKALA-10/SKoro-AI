@@ -115,6 +115,47 @@ def safe_divide(numerator: float, denominator: float, default: float = 0) -> flo
         return default
     return numerator / denominator
 
+def calculate_weighted_average(values: List[float], weights: List[float], default: float = 0) -> float:
+    """가중평균 계산: Σ(값 × 가중치) / Σ(가중치)"""
+    if not values or not weights or len(values) != len(weights):
+        return default
+    
+    weighted_sum = sum(value * weight for value, weight in zip(values, weights))
+    total_weight = sum(weights)
+    
+    return safe_divide(weighted_sum, total_weight, default)
+
+def calculate_individual_weighted_achievement_rate(individual_tasks: List[Dict]) -> Dict[str, float]:
+    """개인별 가중평균 달성률 계산"""
+    if not individual_tasks:
+        return {"achievement_rate": 0, "contribution_rate": 0, "total_weight": 0}
+    
+    # 달성률 가중평균 계산
+    achievement_rates = []
+    weights = []
+    
+    for task in individual_tasks:
+        achievement_rate = task.get('ai_achievement_rate', 0)
+        weight = task.get('weight', 0)
+        
+        achievement_rates.append(achievement_rate)
+        weights.append(weight)
+    
+    # 가중평균 달성률
+    weighted_achievement = calculate_weighted_average(achievement_rates, weights, 0)
+    
+    # 기여도는 단순평균 (기존 방식 유지)
+    contribution_rates = [task.get('ai_contribution_score', 0) for task in individual_tasks]
+    avg_contribution = sum(contribution_rates) / len(contribution_rates) if contribution_rates else 0
+    
+    total_weight = sum(weights)
+    
+    return {
+        "achievement_rate": weighted_achievement,
+        "contribution_rate": avg_contribution,
+        "total_weight": total_weight
+    }
+
 # ===== 데이터 조회 함수 =====
 def fetch_team_evaluation_id(team_id: int, period_id: int) -> Optional[int]:
     """team_evaluations에서 ID 조회"""
@@ -663,7 +704,7 @@ def contribution_calculation_submodule(state: Module2State) -> Module2State:
     print(f"   ⚖️ 기여도 계산 중...")
     
     updated_task_ids = []
-    kpi_contributions_by_emp = {}  # {emp_no: total_score}
+    kpi_contributions_by_emp = {}  # {emp_no: total_score} - 하이브리드 3단계 결과
     
     # KPI별로 처리
     for kpi_id in state.target_team_kpi_ids:
@@ -677,23 +718,27 @@ def contribution_calculation_submodule(state: Module2State) -> Module2State:
             # 정성 평가: LLM 기반 상대 평가
             contributions = calculate_qualitative_contributions(kpi_id, state.period_id, kpi_data)
         
-        # KPI별 기여도를 개인별로 누적 (하이브리드 1단계: 참여자 수 보정)
+        # 하이브리드 1단계: 참여자 수 보정
         kpi_tasks = fetch_kpi_tasks(kpi_id, state.period_id)
         participants_count = len(set(task['emp_no'] for task in kpi_tasks))
         
+        print(f"      • KPI {kpi_id}: {evaluation_type} 평가, 참여자 {participants_count}명")
+        
         for emp_no, contribution_rate in contributions.items():
-            # 참여자 수 보정
+            # 1단계: 참여자 수 보정
             adjusted_score = contribution_rate * participants_count
             
-            # KPI 비중 적용 (하이브리드 2단계)
+            # 2단계: KPI 비중 적용
             kpi_weight = kpi_data.get('weight', 0) / 100.0
             weighted_score = adjusted_score * kpi_weight
             
             if emp_no not in kpi_contributions_by_emp:
                 kpi_contributions_by_emp[emp_no] = 0
             kpi_contributions_by_emp[emp_no] += weighted_score
+            
+            print(f"        - {emp_no}: 원래 {contribution_rate:.1f}% → 보정 {adjusted_score:.1f} → 가중 {weighted_score:.1f}")
         
-        # Task별 기여도 업데이트
+        # Task별 기여도 업데이트 (원래 KPI별 기여도 저장)
         for task in kpi_tasks:
             task_data = fetch_cumulative_task_data(task['task_id'], state.period_id)
             if not task_data:
@@ -702,7 +747,7 @@ def contribution_calculation_submodule(state: Module2State) -> Module2State:
             emp_contribution = contributions.get(task['emp_no'], 0)
             
             update_data = {
-                "ai_contribution_score": int(emp_contribution)
+                "ai_contribution_score": int(emp_contribution)  # KPI별 원래 기여도
             }
             
             if update_task_summary(task_data['task_summary_id'], update_data):
@@ -710,14 +755,124 @@ def contribution_calculation_submodule(state: Module2State) -> Module2State:
     
     # 하이브리드 3단계: 팀 내 % 기여도 변환
     total_team_score = sum(kpi_contributions_by_emp.values())
+    final_contributions = {}
+    
     if total_team_score > 0:
         for emp_no in kpi_contributions_by_emp:
             percentage = (kpi_contributions_by_emp[emp_no] / total_team_score) * 100
-            kpi_contributions_by_emp[emp_no] = round(percentage, 2)
+            final_contributions[emp_no] = round(percentage, 2)
+            print(f"      • {emp_no} 최종 기여도: {percentage:.1f}%")
+    else:
+        # 팀 점수가 0인 경우 동등 분배
+        emp_count = len(kpi_contributions_by_emp)
+        if emp_count > 0:
+            equal_share = 100.0 / emp_count
+            for emp_no in kpi_contributions_by_emp:
+                final_contributions[emp_no] = round(equal_share, 2)
+    
+    # 최종 기여도를 feedback_reports 또는 final_evaluation_reports에 저장
+    save_final_contributions_to_db(state, final_contributions)
+    
+    # 디버깅: 하이브리드 계산 과정 시각화
+    debug_contribution_calculation(state)
     
     state.updated_task_ids = list(set((state.updated_task_ids or []) + updated_task_ids))
-    print(f"   ✅ 기여도 계산 완료: {len(updated_task_ids)}개 Task 업데이트")
+    print(f"   ✅ 기여도 계산 완료: {len(updated_task_ids)}개 Task 업데이트, {len(final_contributions)}명 최종 기여도 저장")
     return state
+
+def save_final_contributions_to_db(state: Module2State, final_contributions: Dict[str, float]):
+    """최종 기여도를 DB에 저장"""
+    team_members = fetch_team_members(state.team_id)
+    
+    for member in team_members:
+        if member.get('role') == 'MANAGER':
+            continue
+            
+        emp_no = member['emp_no']
+        final_contribution = final_contributions.get(emp_no, 0)
+        
+        if state.report_type == "quarterly":
+            # 분기별: feedback_reports에 저장
+            save_feedback_report(
+                emp_no, 
+                state.team_evaluation_id or 0,
+                {"contribution_rate": int(final_contribution)}  # 기존 컬럼명 사용
+            )
+        else:
+            # 연말: final_evaluation_reports에 저장
+            save_final_evaluation_report(
+                emp_no,
+                state.team_evaluation_id or 0,
+                {"contribution_rate": int(final_contribution)}  # 기존 컬럼명 사용
+            )
+
+def debug_contribution_calculation(state: Module2State):
+    """기여도 계산 과정 디버깅 - 하이브리드 방식 검증"""
+    print(f"\n🔍 기여도 계산 과정 디버깅")
+    print(f"{'='*50}")
+    
+    # 1단계: KPI별 원래 기여도 수집
+    kpi_contributions = {}
+    for kpi_id in state.target_team_kpi_ids:
+        evaluation_type = check_evaluation_type(kpi_id)
+        kpi_data = fetch_team_kpi_data(kpi_id)
+        kpi_tasks = fetch_kpi_tasks(kpi_id, state.period_id)
+        participants_count = len(set(task['emp_no'] for task in kpi_tasks))
+        
+        if evaluation_type == "quantitative":
+            contributions = calculate_quantitative_contributions(kpi_id, state.period_id)
+        else:
+            contributions = calculate_qualitative_contributions(kpi_id, state.period_id, kpi_data)
+        
+        kpi_contributions[kpi_id] = {
+            'kpi_name': kpi_data.get('kpi_name', f'KPI{kpi_id}'),
+            'weight': kpi_data.get('weight', 0),
+            'participants_count': participants_count,
+            'contributions': contributions
+        }
+    
+    # 2단계: 하이브리드 계산 과정 시각화
+    print(f"📊 KPI별 기여도 분석:")
+    for kpi_id, kpi_info in kpi_contributions.items():
+        print(f"\n🎯 {kpi_info['kpi_name']} (비중: {kpi_info['weight']}%, 참여자: {kpi_info['participants_count']}명)")
+        print(f"   원래 기여도 → 참여자수 보정 → KPI 비중 적용")
+        print(f"   {'─' * 50}")
+        
+        for emp_no, original_rate in kpi_info['contributions'].items():
+            # 1단계: 참여자 수 보정
+            adjusted = original_rate * kpi_info['participants_count']
+            # 2단계: KPI 비중 적용
+            weighted = adjusted * (kpi_info['weight'] / 100.0)
+            
+            print(f"   {emp_no}: {original_rate:5.1f}% → {adjusted:6.1f} → {weighted:6.1f}")
+    
+    # 3단계: 개인별 종합 점수 계산
+    print(f"\n📈 개인별 종합 점수 (하이브리드 1-2단계 결과):")
+    emp_total_scores = {}
+    
+    for kpi_id, kpi_info in kpi_contributions.items():
+        for emp_no, original_rate in kpi_info['contributions'].items():
+            if emp_no not in emp_total_scores:
+                emp_total_scores[emp_no] = 0
+            
+            adjusted = original_rate * kpi_info['participants_count']
+            weighted = adjusted * (kpi_info['weight'] / 100.0)
+            emp_total_scores[emp_no] += weighted
+    
+    for emp_no, total_score in sorted(emp_total_scores.items(), key=lambda x: x[1], reverse=True):
+        print(f"   {emp_no}: {total_score:.1f}점")
+    
+    # 4단계: 팀 내 % 기여도 변환
+    total_team_score = sum(emp_total_scores.values())
+    print(f"\n🏆 최종 기여도 (하이브리드 3단계 결과):")
+    print(f"   팀 전체 점수: {total_team_score:.1f}")
+    print(f"   {'─' * 30}")
+    
+    for emp_no, total_score in sorted(emp_total_scores.items(), key=lambda x: x[1], reverse=True):
+        final_percentage = (total_score / total_team_score) * 100 if total_team_score > 0 else 0
+        print(f"   {emp_no}: {final_percentage:.1f}% ({total_score:.1f}점)")
+    
+    print(f"{'='*50}")
 
 def calculate_quantitative_contributions(kpi_id: int, period_id: int) -> Dict[str, float]:
     """정량 평가 기여도 계산"""
@@ -1396,7 +1551,7 @@ def db_update_submodule(state: Module2State) -> Module2State:
         raise
 
 def update_quarterly_specific_data(state: Module2State):
-    """분기별 전용 데이터 업데이트"""
+    """분기별 전용 데이터 업데이트 - Task Weight 기반 가중평균"""
     print(f"      📊 분기별 전용 데이터 업데이트 중...")
     
     # 1. 개인별 달성률 기준 순위 계산 및 업데이트
@@ -1407,27 +1562,33 @@ def update_quarterly_specific_data(state: Module2State):
         if member.get('role') == 'MANAGER':
             continue
             
-        # 개인별 평균 달성률 계산
+        # 개인별 Task 수집
         individual_tasks = []
-        total_achievement = 0
-        total_contribution = 0
-        
         for task_id in state.target_task_ids:
             task_data = fetch_cumulative_task_data(task_id, state.period_id)
             if task_data and task_data.get('emp_no') == member['emp_no']:
                 individual_tasks.append(task_data)
-                total_achievement += task_data.get('ai_achievement_rate', 0)
-                total_contribution += task_data.get('ai_contribution_score', 0)
         
         if individual_tasks:
-            avg_achievement = total_achievement / len(individual_tasks)
-            avg_contribution = total_contribution / len(individual_tasks)
+            # 가중평균 계산
+            result = calculate_individual_weighted_achievement_rate(individual_tasks)
+            
+            # 계산 과정 로깅
+            print(f"        📈 {member['emp_name']}({member['emp_no']}) 가중평균 계산:")
+            for task in individual_tasks:
+                task_name = task.get('task_name', f'Task{task.get("task_id")}')
+                task_weight = task.get('weight', 0)
+                task_achievement = task.get('ai_achievement_rate', 0)
+                print(f"          • {task_name}: {task_achievement}% × {task_weight} = {task_achievement * task_weight}")
+            print(f"          = {result['achievement_rate']:.1f}% (총 가중치: {result['total_weight']})")
             
             member_achievements.append({
                 'emp_no': member['emp_no'],
-                'avg_achievement_rate': avg_achievement,
-                'avg_contribution_rate': avg_contribution,
-                'task_count': len(individual_tasks)
+                'emp_name': member['emp_name'],
+                'avg_achievement_rate': result['achievement_rate'],
+                'avg_contribution_rate': result['contribution_rate'],
+                'task_count': len(individual_tasks),
+                'total_weight': result['total_weight']
             })
     
     # 달성률 기준 순위 매기기
@@ -1450,9 +1611,12 @@ def update_quarterly_specific_data(state: Module2State):
         )
     
     print(f"      ✅ 분기별 순위 업데이트 완료: {len(member_achievements)}명")
+    print(f"      📊 가중평균 달성률 순위:")
+    for i, member in enumerate(member_achievements):
+        print(f"        {i+1}위: {member['emp_name']}({member['emp_no']}) - {member['avg_achievement_rate']:.1f}%")
 
 def update_annual_specific_data(state: Module2State):
-    """연말 전용 데이터 업데이트"""
+    """연말 전용 데이터 업데이트 - Task Weight 기반 가중평균"""
     print(f"      📊 연말 전용 데이터 업데이트 중...")
     
     team_members = fetch_team_members(state.team_id)
@@ -1461,26 +1625,29 @@ def update_annual_specific_data(state: Module2State):
         if member.get('role') == 'MANAGER':
             continue
             
-        # 개인별 연간 종합 데이터 계산
+        # 개인별 Task 수집
         individual_tasks = []
-        total_achievement = 0
-        total_contribution = 0
-        
         for task_id in state.target_task_ids:
             task_data = fetch_cumulative_task_data(task_id, state.period_id)
             if task_data and task_data.get('emp_no') == member['emp_no']:
                 individual_tasks.append(task_data)
-                total_achievement += task_data.get('ai_achievement_rate', 0)
-                total_contribution += task_data.get('ai_contribution_score', 0)
         
         if individual_tasks:
-            avg_achievement = total_achievement / len(individual_tasks)
-            avg_contribution = total_contribution / len(individual_tasks)
+            # 가중평균 계산
+            result = calculate_individual_weighted_achievement_rate(individual_tasks)
+            
+            # 계산 과정 로깅
+            print(f"        📈 {member['emp_name']}({member['emp_no']}) 연간 가중평균 계산:")
+            for task in individual_tasks:
+                task_name = task.get('task_name', f'Task{task.get("task_id")}')
+                task_weight = task.get('weight', 0)
+                task_achievement = task.get('ai_achievement_rate', 0)
+                print(f"          • {task_name}: {task_achievement}% × {task_weight} = {task_achievement * task_weight}")
+            print(f"          = {result['achievement_rate']:.1f}% (총 가중치: {result['total_weight']})")
             
             # final_evaluation_reports 업데이트
             final_data = {
-                'ai_annual_achievement_rate': int(avg_achievement),
-                'contribution_rate': int(avg_contribution)
+                'ai_annual_achievement_rate': int(result['achievement_rate'])
             }
             
             save_final_evaluation_report(
