@@ -37,6 +37,7 @@ from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.messages import SystemMessage, HumanMessage
 from sqlalchemy import create_engine, text
 from sqlalchemy.engine import Row
+from langgraph.graph import StateGraph, START, END  # LangGraph 추가
 
 # 로깅 설정
 logging.basicConfig(level=logging.INFO)
@@ -1567,10 +1568,24 @@ def db_update_submodule(state: Module2State) -> Module2State:
         raise
 
 def update_quarterly_specific_data(state: Module2State):
-    """분기별 전용 데이터 업데이트 - Task Weight 기반 가중평균"""
+    """분기별 전용 데이터 업데이트 - 개인 달성률 기반 순위 매기기"""
     print(f"      📊 분기별 전용 데이터 업데이트 중...")
     
-    # 1. 개인별 달성률 기준 순위 계산 및 업데이트
+    # 1. 팀 내 개인별 달성률 기반 순위 계산 및 업데이트
+    team_ranking_result = calculate_team_ranking(state)
+    
+    # 2. 순위 결과를 feedback_reports에 저장
+    update_team_ranking_to_feedback_reports(state, team_ranking_result)
+    
+    print(f"      ✅ 분기별 순위 업데이트 완료: {len(team_ranking_result)}명")
+    print(f"      📊 팀 내 달성률 순위:")
+    for i, member in enumerate(team_ranking_result):
+        print(f"        {i+1}위: {member['emp_name']}({member['emp_no']}) - {member['avg_achievement_rate']:.1f}%")
+
+def calculate_team_ranking(state: Module2State) -> List[Dict]:
+    """팀 내 개인별 달성률 기반 순위 계산"""
+    print(f"        🏆 팀 내 순위 계산 중...")
+    
     team_members = fetch_team_members(state.team_id)
     member_achievements = []
     
@@ -1586,50 +1601,155 @@ def update_quarterly_specific_data(state: Module2State):
                 individual_tasks.append(task_data)
         
         if individual_tasks:
-            # 가중평균 계산
+            # 가중평균 달성률 계산
             result = calculate_individual_weighted_achievement_rate(individual_tasks)
             
-            # 계산 과정 로깅
-            print(f"        📈 {member['emp_name']}({member['emp_no']}) 가중평균 계산:")
+            # 계산 과정 상세 로깅
+            print(f"          📈 {member['emp_name']}({member['emp_no']}) 달성률 계산:")
+            total_weighted_score = 0
             for task in individual_tasks:
                 task_name = task.get('task_name', f'Task{task.get("task_id")}')
                 task_weight = task.get('weight', 0)
                 task_achievement = task.get('ai_achievement_rate', 0)
-                print(f"          • {task_name}: {task_achievement}% × {task_weight} = {task_achievement * task_weight}")
-            print(f"          = {result['achievement_rate']:.1f}% (총 가중치: {result['total_weight']})")
+                weighted_score = task_achievement * task_weight
+                total_weighted_score += weighted_score
+                print(f"            • {task_name}: {task_achievement}% × {task_weight} = {weighted_score}")
+            
+            print(f"            = {result['achievement_rate']:.1f}% (총 가중점수: {total_weighted_score}, 총 가중치: {result['total_weight']})")
             
             member_achievements.append({
                 'emp_no': member['emp_no'],
                 'emp_name': member['emp_name'],
+                'position': member.get('position', ''),
+                'cl': member.get('cl', ''),
                 'avg_achievement_rate': result['achievement_rate'],
                 'avg_contribution_rate': result['contribution_rate'],
                 'task_count': len(individual_tasks),
-                'total_weight': result['total_weight']
+                'total_weight': result['total_weight'],
+                'total_weighted_score': total_weighted_score
             })
+        else:
+            print(f"          ⚠️  {member['emp_name']}({member['emp_no']}): 참여 Task 없음")
     
-    # 달성률 기준 순위 매기기
+    # 달성률 기준 내림차순 정렬 (높은 달성률이 1위)
     member_achievements.sort(key=lambda x: x['avg_achievement_rate'], reverse=True)
     
-    # feedback_reports 업데이트
-    for i, member_data in enumerate(member_achievements):
+    # 동점자 처리 (같은 달성률인 경우 가중점수로 재정렬)
+    for i in range(len(member_achievements) - 1):
+        if member_achievements[i]['avg_achievement_rate'] == member_achievements[i + 1]['avg_achievement_rate']:
+            # 동점자인 경우 가중점수로 재정렬
+            if member_achievements[i]['total_weighted_score'] < member_achievements[i + 1]['total_weighted_score']:
+                member_achievements[i], member_achievements[i + 1] = member_achievements[i + 1], member_achievements[i]
+    
+    return member_achievements
+
+def update_team_ranking_to_feedback_reports(state: Module2State, team_ranking: List[Dict]):
+    """팀 순위 결과를 feedback_reports에 저장"""
+    print(f"        💾 순위 결과를 feedback_reports에 저장 중...")
+    
+    updated_count = 0
+    
+    for i, member_data in enumerate(team_ranking):
         ranking = i + 1
         
+        # feedback_reports 업데이트 데이터
         feedback_data = {
-            'ranking': ranking,
-            'ai_achievement_rate': int(member_data['avg_achievement_rate']),
-            'contribution_rate': int(member_data['avg_contribution_rate'])
+            'ranking': ranking,  # 팀 내 순위 (1, 2, 3, ...)
+            'ai_achievement_rate': int(member_data['avg_achievement_rate']),  # 가중평균 달성률
+            'contribution_rate': int(member_data['avg_contribution_rate'])    # 평균 기여도
         }
         
-        save_feedback_report(
+        # 기존 feedback_report 업데이트 또는 새로 생성
+        feedback_report_id = save_feedback_report(
             member_data['emp_no'],
             state.team_evaluation_id or 0,
             feedback_data
         )
+        
+        updated_count += 1
+        
+        # 순위 저장 결과 로깅
+        print(f"          {ranking}위: {member_data['emp_name']}({member_data['emp_no']}) - {member_data['avg_achievement_rate']:.1f}% → feedback_report_id: {feedback_report_id}")
     
-    print(f"      ✅ 분기별 순위 업데이트 완료: {len(member_achievements)}명")
-    print(f"      📊 가중평균 달성률 순위:")
-    for i, member in enumerate(member_achievements):
-        print(f"        {i+1}위: {member['emp_name']}({member['emp_no']}) - {member['avg_achievement_rate']:.1f}%")
+    print(f"        ✅ {updated_count}명의 순위 정보 저장 완료")
+
+def validate_team_ranking_data(state: Module2State) -> Dict[str, Any]:
+    """팀 순위 데이터 검증"""
+    print(f"        🔍 팀 순위 데이터 검증 중...")
+    
+    errors = []
+    warnings = []
+    
+    try:
+        with engine.connect() as connection:
+            # feedback_reports에서 순위 데이터 조회
+            query = text("""
+                SELECT emp_no, ranking, ai_achievement_rate, contribution_rate
+                FROM feedback_reports 
+                WHERE team_evaluation_id = :team_evaluation_id
+                ORDER BY ranking
+            """)
+            results = connection.execute(query, {"team_evaluation_id": state.team_evaluation_id})
+            ranking_data = [row_to_dict(row) for row in results]
+            
+            if not ranking_data:
+                errors.append("팀 순위 데이터가 없습니다")
+                return {'success': False, 'errors': errors, 'warnings': warnings}
+            
+            # 1. 순위 연속성 검증
+            expected_rankings = list(range(1, len(ranking_data) + 1))
+            actual_rankings = [r['ranking'] for r in ranking_data]
+            
+            if actual_rankings != expected_rankings:
+                errors.append(f"순위가 연속적이지 않음: 예상 {expected_rankings}, 실제 {actual_rankings}")
+            
+            # 2. 달성률 범위 검증
+            for rank_data in ranking_data:
+                achievement_rate = rank_data.get('ai_achievement_rate', 0)
+                if not (0 <= achievement_rate <= 200):
+                    errors.append(f"사번 {rank_data['emp_no']}: 달성률 {achievement_rate}%가 범위를 벗어남")
+                
+                contribution_rate = rank_data.get('contribution_rate', 0)
+                if not (0 <= contribution_rate <= 100):
+                    warnings.append(f"사번 {rank_data['emp_no']}: 기여도 {contribution_rate}%가 범위를 벗어남")
+            
+            # 3. 순위와 달성률 일관성 검증
+            for i in range(len(ranking_data) - 1):
+                current_rate = ranking_data[i]['ai_achievement_rate']
+                next_rate = ranking_data[i + 1]['ai_achievement_rate']
+                
+                if current_rate < next_rate:
+                    errors.append(f"순위 {i+1}위({ranking_data[i]['emp_no']})의 달성률 {current_rate}%가 {i+2}위({ranking_data[i+1]['emp_no']})의 달성률 {next_rate}%보다 낮음")
+            
+            # 4. 팀원 수와 순위 수 일치 검증
+            team_members = fetch_team_members(state.team_id)
+            non_manager_count = len([m for m in team_members if m.get('role') != 'MANAGER'])
+            
+            if len(ranking_data) != non_manager_count:
+                warnings.append(f"팀원 수({non_manager_count}명)와 순위 수({len(ranking_data)}명)가 일치하지 않음")
+            
+            success = len(errors) == 0
+            
+            if warnings:
+                print(f"          ⚠️  검증 경고: {len(warnings)}건")
+            
+            return {
+                'success': success,
+                'errors': errors,
+                'warnings': warnings,
+                'ranking_count': len(ranking_data),
+                'team_member_count': non_manager_count
+            }
+            
+    except Exception as e:
+        print(f"          ❌ 순위 데이터 검증 실패: {e}")
+        return {
+            'success': False,
+            'errors': [f"순위 데이터 검증 오류: {str(e)}"],
+            'warnings': [],
+            'ranking_count': 0,
+            'team_member_count': 0
+        }
 
 def update_annual_specific_data(state: Module2State):
     """연말 전용 데이터 업데이트 - Task Weight 기반 가중평균"""
@@ -1727,7 +1847,18 @@ def validate_final_update_results(state: Module2State) -> Dict[str, Any]:
                 if not team_eval.get('ai_team_overall_analysis_comment'):
                     warnings.append("Team evaluation: ai_team_overall_analysis_comment empty")
         
-        # 4. 레포트 검증
+        # 4. 분기별 팀 순위 검증 (새로 추가)
+        if state.report_type == "quarterly":
+            ranking_validation = validate_team_ranking_data(state)
+            if not ranking_validation['success']:
+                errors.extend(ranking_validation['errors'])
+            warnings.extend(ranking_validation['warnings'])
+            
+            print(f"      📊 팀 순위 검증 결과:")
+            print(f"        • 순위 데이터: {ranking_validation['ranking_count']}명")
+            print(f"        • 팀원 수: {ranking_validation['team_member_count']}명")
+        
+        # 5. 레포트 검증
         if state.report_type == "quarterly" and state.feedback_report_ids:
             for report_id in state.feedback_report_ids:
                 # feedback_reports 검증 로직
@@ -1738,7 +1869,7 @@ def validate_final_update_results(state: Module2State) -> Dict[str, Any]:
                 # final_evaluation_reports 검증 로직
                 pass
         
-        # 5. 데이터 일관성 검증
+        # 6. 데이터 일관성 검증
         consistency_errors = validate_data_consistency(state)
         errors.extend(consistency_errors)
         
@@ -1754,7 +1885,8 @@ def validate_final_update_results(state: Module2State) -> Dict[str, Any]:
             'stats': {
                 'tasks_validated': len(state.updated_task_ids or []),
                 'kpis_validated': len(state.updated_team_kpi_ids or []),
-                'reports_validated': len(state.feedback_report_ids or []) + len(state.final_evaluation_report_ids or [])
+                'reports_validated': len(state.feedback_report_ids or []) + len(state.final_evaluation_report_ids or []),
+                'ranking_validated': state.report_type == "quarterly"
             }
         }
         
@@ -1817,155 +1949,107 @@ def validate_data_consistency(state: Module2State) -> List[str]:
     
     return errors
 
-# ===== 메인 파이프라인 함수 =====
-def execute_module2_pipeline(period_id: int, team_id: int) -> Dict[str, Any]:
-    """모듈2 전체 파이프라인 실행 - 우리가 상의한 최종 구조"""
+# ===== LangGraph 워크플로우 구성 =====
+
+# StateGraph에 사용할 타입: dataclass 그대로 사용 (dict도 가능)
+module2_workflow = StateGraph(Module2State)
+
+# 각 서브모듈을 노드로 등록
+module2_workflow.add_node("data_collection", data_collection_submodule)
+module2_workflow.add_node("achievement_and_grade", achievement_and_grade_calculation_submodule)
+module2_workflow.add_node("contribution", contribution_calculation_submodule)
+module2_workflow.add_node("team_analysis", team_analysis_submodule)
+module2_workflow.add_node("comment_generation", comment_generation_submodule)
+module2_workflow.add_node("db_update", db_update_submodule)
+
+# 엣지(실행 순서) 정의
+module2_workflow.add_edge(START, "data_collection")
+module2_workflow.add_edge("data_collection", "achievement_and_grade")
+module2_workflow.add_edge("achievement_and_grade", "contribution")
+module2_workflow.add_edge("contribution", "team_analysis")
+module2_workflow.add_edge("team_analysis", "comment_generation")
+module2_workflow.add_edge("comment_generation", "db_update")
+module2_workflow.add_edge("db_update", END)
+
+# 그래프 컴파일
+module2_graph = module2_workflow.compile()
+
+# ===== 실행 함수 및 main 진입점 추가 =====
+def run_module2_for_team_period(team_id: int, period_id: int, report_type: str, target_task_ids: list, target_team_kpi_ids: list):
+    """
+    모듈2 전체 워크플로우 실행 함수
+    Args:
+        team_id: 팀 ID
+        period_id: 평가 기간 ID (분기)
+        report_type: 'quarterly' 또는 'annual'
+        target_task_ids: 평가 대상 Task ID 리스트
+        target_team_kpi_ids: 평가 대상 KPI ID 리스트
+    """
+    print(f"\n============================")
+    print(f"[모듈2] 팀 {team_id}, 기간 {period_id} ({'연말' if report_type == 'annual' else '분기'}) 평가 실행")
+    print(f"============================\n")
     
-    start_time = datetime.now()
-    print(f"\n{'='*60}")
-    print(f"🚀 모듈2 목표달성도 분석 파이프라인 시작")
-    print(f"{'='*60}")
-    print(f"📍 설정 정보:")
-    print(f"   팀 ID: {team_id}")
-    print(f"   기간 ID: {period_id}")
+    # State 생성
+    state = Module2State(
+        report_type=report_type if report_type == "annual" else "quarterly",  # Literal 타입 보장
+        team_id=team_id,
+        period_id=period_id,
+        target_task_ids=target_task_ids,
+        target_team_kpi_ids=target_team_kpi_ids
+    )
     
-    try:
-        # 기본 정보 및 State 초기화
+    # 워크플로우 실행
+    result = module2_graph.invoke(state)
+    print(f"\n[완료] 팀 {team_id}, 기간 {period_id} 평가 종료\n")
+    return result
+
+if __name__ == "__main__":
+    # 분기별 period_id와 report_type 매핑 (예시)
+    period_map = {
+        1: {"period_id": 1, "report_type": "quarterly"},
+        2: {"period_id": 2, "report_type": "quarterly"},
+        3: {"period_id": 3, "report_type": "quarterly"},
+        4: {"period_id": 4, "report_type": "annual"},
+    }
+    
+    # 실제 DB에서 team_id=1의 task/kpi id를 조회하는 코드 필요
+    # 여기서는 예시로 임의의 ID 사용 (실제 환경에 맞게 수정 필요)
+    # 아래 쿼리로 자동 조회 가능
+    def fetch_team_tasks_and_kpis(team_id: int, period_id: int):
         with engine.connect() as connection:
-            # period 정보 조회
-            period_query = text("SELECT * FROM periods WHERE period_id = :period_id")
-            period_result = connection.execute(period_query, {"period_id": period_id})
-            period_row = period_result.fetchone()
-            period_data = row_to_dict(period_row) if period_row else {}
-            
-            if not period_data:
-                raise DataIntegrityError(f"Period {period_id} not found")
-            
-            # 대상 task_ids 조회
+            # 해당 팀의 해당 기간 Task ID
             task_query = text("""
-                SELECT DISTINCT t.task_id, t.team_kpi_id
-                FROM tasks t
+                SELECT t.task_id FROM tasks t
                 JOIN employees e ON t.emp_no = e.emp_no
                 WHERE e.team_id = :team_id
             """)
-            task_results = connection.execute(task_query, {"team_id": team_id})
-            task_data = [row_to_dict(row) for row in task_results]
+            task_ids = [row[0] for row in connection.execute(task_query, {"team_id": team_id})]
             
-            if not task_data:
-                raise DataIntegrityError(f"No tasks found for team {team_id}")
-            
-            target_task_ids = [t['task_id'] for t in task_data]
-            target_team_kpi_ids = list(set(t['team_kpi_id'] for t in task_data))
-        
-        # State 초기화
-        state = Module2State(
-            report_type="annual" if period_data.get('is_final') else "quarterly",
-            team_id=team_id,
-            period_id=period_id,
-            target_task_ids=target_task_ids,
-            target_team_kpi_ids=target_team_kpi_ids
-        )
-        
-        print(f"   평가 유형: {state.report_type}")
-        print(f"   대상 Task: {len(target_task_ids)}개")
-        print(f"   대상 KPI: {len(target_team_kpi_ids)}개")
-        
-        # 6단계 서브모듈 실행
-        print(f"\n📊 1단계: 데이터 수집")
-        state = data_collection_submodule(state)
-        
-        print(f"📊 2-4단계: 병렬 처리 (달성률, 기여도, 팀 분석)")
-        # 실제 병렬 처리 구현시에는 concurrent.futures 등 사용
-        # 여기서는 순차 실행으로 구현
-        state = achievement_and_grade_calculation_submodule(state)
-        state = contribution_calculation_submodule(state)
-        state = team_analysis_submodule(state)
-        
-        print(f"📊 5단계: 코멘트 생성")
-        state = comment_generation_submodule(state)
-        
-        print(f"📊 6단계: 최종 DB 업데이트")
-        state = db_update_submodule(state)
-        
-        # 실행 결과 요약
-        execution_time = (datetime.now() - start_time).total_seconds()
-        
-        result = {
-            "status": "success",
-            "execution_time_seconds": execution_time,
-            "report_type": state.report_type,
-            "team_id": team_id,
-            "period_id": period_id,
-            "updates": {
-                "tasks_updated": len(state.updated_task_ids or []),
-                "kpis_updated": len(state.updated_team_kpi_ids or []),
-                "feedback_reports": len(state.feedback_report_ids or []),
-                "final_reports": len(state.final_evaluation_report_ids or []),
-                "team_evaluation_id": state.team_evaluation_id
-            }
-        }
-        
-        print(f"\n✅ 모듈2 파이프라인 성공 완료!")
-        print(f"⏱️  실행 시간: {execution_time:.2f}초")
-        print(f"📈 업데이트 결과:")
-        print(f"   • Task 업데이트: {result['updates']['tasks_updated']}개")
-        print(f"   • KPI 업데이트: {result['updates']['kpis_updated']}개")
-        print(f"   • 피드백 리포트: {result['updates']['feedback_reports']}개")
-        print(f"   • 최종 리포트: {result['updates']['final_reports']}개")
-        print(f"   • 팀 평가 ID: {result['updates']['team_evaluation_id']}")
-        print(f"{'='*60}")
-        
-        return result
-        
-    except Exception as e:
-        execution_time = (datetime.now() - start_time).total_seconds()
-        error_result = {
-            "status": "error",
-            "execution_time_seconds": execution_time,
-            "error_message": str(e),
-            "error_type": type(e).__name__,
-            "team_id": team_id,
-            "period_id": period_id
-        }
-        
-        print(f"\n❌ 모듈2 파이프라인 실패!")
-        print(f"⏱️  실행 시간: {execution_time:.2f}초")
-        print(f"💥 오류: {e}")
-        print(f"🔍 오류 유형: {type(e).__name__}")
-        print(f"{'='*60}")
-        
-        return error_result
+            # 해당 팀의 KPI ID
+            kpi_query = text("""
+                SELECT team_kpi_id FROM team_kpis WHERE team_id = :team_id
+            """)
+            kpi_ids = [row[0] for row in connection.execute(kpi_query, {"team_id": team_id})]
+            return task_ids, kpi_ids
+    
+    import argparse
+    parser = argparse.ArgumentParser(description="Module2 Goal Achievement Runner")
+    parser.add_argument("--quarter", type=int, choices=[1,2,3,4], required=False, default=4, help="실행할 분기 (1,2,3,4). 기본값: 1")
+    args = parser.parse_args()
+    
+    team_id = 1
+    period_info = period_map[args.quarter]
+    period_id = period_info["period_id"]
+    report_type = period_info["report_type"]
+    
+    # Task/KPI ID 자동 조회
+    task_ids, kpi_ids = fetch_team_tasks_and_kpis(team_id, period_id)
+    
+    run_module2_for_team_period(
+        team_id=team_id,
+        period_id=period_id,
+        report_type=report_type,
+        target_task_ids=task_ids,
+        target_team_kpi_ids=kpi_ids
+    )
 
-# ===== 테스트 및 실행 함수 =====
-if __name__ == "__main__":
-    # 테스트 실행
-    test_cases = [
-        {"period_id": 4, "team_id": 1, "desc": "Q4 (연말)"},
-        # {"period_id": 2, "team_id": 1, "desc": "Q2 (2분기)"}
-    ]
-
-    for test in test_cases:
-        print(f"\n🧪 모듈2 테스트 실행 - {test['desc']}")
-        print(f"   테스트 팀: {test['team_id']}")
-        print(f"   테스트 기간: Q{test['period_id']}")
-        
-        try:
-            result = execute_module2_pipeline(test['period_id'], test['team_id'])
-            
-            if result.get('status') == 'success':
-                print(f"\n🎉 테스트 성공!")
-                print(f"📊 실행 결과 요약:")
-                print(f"   • 상태: {result['status']}")
-                print(f"   • 실행 시간: {result['execution_time_seconds']:.2f}초")
-                print(f"   • 평가 유형: {result['report_type']}")
-                print(f"   • 업데이트된 Task: {result['updates']['tasks_updated']}개")
-                print(f"   • 업데이트된 KPI: {result['updates']['kpis_updated']}개")
-            else:
-                print(f"\n❌ 테스트 실패!")
-                print(f"   • 오류: {result.get('error_message', 'Unknown error')}")
-                print(f"   • 오류 유형: {result.get('error_type', 'Unknown')}")
-            
-        except Exception as e:
-            print(f"\n💥 테스트 실행 중 예외 발생: {e}")
-            import traceback
-            traceback.print_exc()
