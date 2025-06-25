@@ -437,15 +437,21 @@ def call_llm_for_team_performance_comment(our_overall_rate: float, cluster_stats
 def save_team_comparison_results(team_evaluation_id: int, comparison_json: Dict) -> bool:
     """팀 비교 결과 DB 저장"""
     with engine.connect() as connection:
+        # comparison_result 추출
+        comparison_result = comparison_json.get("overall", {}).get("comparison_result", "")
+        
         query = text("""
             UPDATE team_evaluations
-            SET ai_team_comparison = :comparison_json
+            SET 
+                ai_team_comparison = :comparison_json,
+                relative_performance = :comparison_result
             WHERE team_evaluation_id = :team_evaluation_id
         """)
         
         result = connection.execute(query, {
             "team_evaluation_id": team_evaluation_id,
-            "comparison_json": json.dumps(comparison_json, ensure_ascii=False)
+            "comparison_json": json.dumps(comparison_json, ensure_ascii=False),
+            "comparison_result": comparison_result
         })
         connection.commit()
         return result.rowcount > 0
