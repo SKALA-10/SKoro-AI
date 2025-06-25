@@ -1,37 +1,44 @@
-# practice_08.py
-# 팀 성과 비교 모듈 - KPI별 유사도 매칭 및 비교 분석
+# -*- coding: utf-8 -*-
+"""
+모듈8: 팀 성과 비교 분석 모듈 - 완전 구현
 
-# 1. 환경 설정 및 라이브러리 설치 (필요시)
-# !pip install langchain langchain-openai langgraph sqlalchemy pymysql python-dotenv scikit-learn
+기능:
+1. 클러스터 통계 존재 확인 및 계산
+2. 우리팀 + 유사팀 성과 데이터 수집  
+3. KPI별 유사도 매칭 + 비교 분석
+4. LLM 기반 팀 성과 코멘트 생성
+5. JSON 결과 DB 저장
+6. LangGraph 워크플로우 구조
+"""
 
 import sys
 import os
-# sys.path.append(os.path.abspath(os.path.join(os.getcwd(), '../../../..')))  # 루트 경로로 이동
+import json
+import re
+import statistics
+import time
+import logging
+from typing import Dict, List, Optional, Any, Literal, TypedDict
+from dataclasses import dataclass
+from datetime import datetime
 
-
-# 루트 경로 설정 추가
-ROOT_DIR = os.path.abspath(os.path.join(os.getcwd(), '../../../..'))
+# 환경 설정
+current_file_dir = os.path.dirname(os.path.abspath(__file__))
+ROOT_DIR = os.path.abspath(os.path.join(current_file_dir, '../../../../'))
 CACHE_DIR = os.path.join(ROOT_DIR, 'data', 'cache')
 
 # 캐시 디렉토리 생성 (없으면)
 os.makedirs(CACHE_DIR, exist_ok=True)
 
+sys.path.append(ROOT_DIR)
 
-# 2. .env 파일 로드
-from dotenv import load_dotenv
-load_dotenv()
-
-# 3. 필수 라이브러리 임포트
-from typing import Annotated, List, Literal, TypedDict, Dict, Any, Optional
+# 필수 라이브러리 임포트
 from langchain_core.messages import HumanMessage
-import operator
 from langgraph.graph import StateGraph, START, END
-import json
-import re
-import statistics
+from sqlalchemy import create_engine, text
+from sqlalchemy.engine import Row
 
 # DB 연결
-from sqlalchemy import create_engine, text
 from config.settings import DatabaseConfig
 
 # LLM 관련
@@ -46,15 +53,25 @@ from sklearn.metrics.pairwise import cosine_similarity
 # 팀 성과 비교 분석기 임포트
 from shared.team_performance_comparator import TeamPerformanceComparator
 
-# 4. DB 설정 및 LLM 클라이언트 초기화
+# 로깅 설정
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+# httpx 및 관련 라이브러리 로그 레벨 조정 (HTTP 요청 로그 숨김)
+logging.getLogger("httpx").setLevel(logging.WARNING)
+logging.getLogger("openai").setLevel(logging.WARNING)
+logging.getLogger("langchain").setLevel(logging.WARNING)
+logging.getLogger("langchain_openai").setLevel(logging.WARNING)
+
+# DB 설정 및 LLM 클라이언트 초기화
 db_config = DatabaseConfig()
 DATABASE_URL = db_config.DATABASE_URL
 engine = create_engine(DATABASE_URL, pool_pre_ping=True)
 
 llm_client = ChatOpenAI(model="gpt-4o-mini", temperature=0)
-print(f"LLM Client initialized: {llm_client.model_name}")
+logger.info(f"LLM Client initialized: {llm_client.model_name}")
 
-# --- Module8AgentState 정의 ---
+# ===== 상태 정의 =====
 class Module8AgentState(TypedDict):
     """
     모듈 8 (팀 성과 비교 모듈)의 내부 상태를 정의합니다.
@@ -85,11 +102,17 @@ class Module8AgentState(TypedDict):
     final_comparison_json: Dict
     
     # 업데이트된 ID
-    updated_team_evaluation_id: int = None
+    updated_team_evaluation_id: Optional[int]
 
-# --- 도우미 함수들 ---
+# ===== 에러 처리 클래스 =====
+class Module8ValidationError(Exception):
+    pass
 
-def row_to_dict(row) -> Dict[str, Any]:
+class Module8DataIntegrityError(Exception):
+    pass
+
+# ===== 유틸리티 함수 =====
+def row_to_dict(row: Row) -> Dict[str, Any]:
     """SQLAlchemy Row 객체를 딕셔너리로 변환"""
     if row is None:
         return {}
@@ -102,9 +125,30 @@ def _extract_json_from_llm_response(text: str) -> str:
         return match.group(1).strip()
     return text.strip()
 
-# --- 데이터 조회 함수들 ---
+def robust_llm_call(prompt: str, validation_func, max_retries: int = 3, context: str = ""):
+    """견고한 LLM 호출"""
+    last_error = None
+    
+    for attempt in range(max_retries):
+        try:
+            response = llm_client.invoke(prompt)
+            content = str(response.content)
+            validated_result = validation_func(content)
+            return validated_result
+            
+        except Exception as e:
+            last_error = e
+            logger.warning(f"LLM call attempt {attempt + 1} failed for {context}: {e}")
+            
+            if attempt < max_retries - 1:
+                time.sleep(2 ** attempt)  # 지수 백오프
+    
+    logger.error(f"All LLM attempts failed for {context}: {last_error}")
+    raise Module8ValidationError(f"Failed after {max_retries} attempts: {last_error}")
 
-def fetch_team_kpis_data(team_id: int, period_id: int) -> Dict:
+# ===== 데이터 조회 함수들 =====
+
+def fetch_team_kpis_data(team_id: int, period_id: int) -> Optional[Dict]:
     """팀 KPI 데이터와 종합 달성률 조회"""
     with engine.connect() as connection:
         # team_evaluations.average_achievement_rate 조회
@@ -140,7 +184,7 @@ def fetch_team_kpis_data(team_id: int, period_id: int) -> Dict:
         kpis = []
         for row in kpi_results:
             kpis.append({
-                "team_kpi_id": row.team_kpi_id,  # 추가
+                "team_kpi_id": row.team_kpi_id,
                 "kpi_name": row.kpi_name,
                 "kpi_description": row.kpi_description or "",
                 "rate": row.rate or 0,
@@ -184,7 +228,7 @@ def fetch_multiple_teams_kpis(team_ids: List[int]) -> List[Dict]:
             
             teams_kpis[team_id].append({
                 "team_id": team_id,
-                "team_kpi_id": row.team_kpi_id,  # 추가
+                "team_kpi_id": row.team_kpi_id,
                 "kpi_name": row.kpi_name,
                 "kpi_description": row.kpi_description or "",
                 "rate": row.rate or 0,
@@ -212,7 +256,7 @@ def fetch_team_evaluation_id(team_id: int, period_id: int) -> Optional[int]:
         }).scalar_one_or_none()
         return result
 
-# --- KPI 비교 분석 함수들 ---
+# ===== KPI 비교 분석 함수들 =====
 
 def find_similar_kpis_by_text_similarity(our_kpi: Dict, similar_teams_kpis: List[Dict], 
                                        threshold: float = 0.3) -> List[Dict]:
@@ -286,7 +330,7 @@ def compare_kpis_with_similar_teams(our_kpis: List[Dict], similar_teams_kpis: Li
             )
             
             comparison_results.append({
-                "team_kpi_id": our_kpi["team_kpi_id"],  # 추가
+                "team_kpi_id": our_kpi["team_kpi_id"],
                 "kpi_name": our_kpi["kpi_name"],
                 "our_rate": our_kpi["rate"],
                 "similar_avg_rate": round(similar_avg, 1),
@@ -296,7 +340,7 @@ def compare_kpis_with_similar_teams(our_kpis: List[Dict], similar_teams_kpis: Li
         else:
             # 샘플 부족 → 비교 불가
             comparison_results.append({
-                "team_kpi_id": our_kpi["team_kpi_id"],  # 추가
+                "team_kpi_id": our_kpi["team_kpi_id"],
                 "kpi_name": our_kpi["kpi_name"],
                 "our_rate": our_kpi["rate"],
                 "similar_avg_rate": None,
@@ -306,7 +350,7 @@ def compare_kpis_with_similar_teams(our_kpis: List[Dict], similar_teams_kpis: Li
     
     return comparison_results
 
-# --- LLM 함수 ---
+# ===== LLM 함수 =====
 
 def call_llm_for_team_performance_comment(our_overall_rate: float, cluster_stats: Dict, 
                                         kpi_comparison_results: List[Dict], 
@@ -353,29 +397,42 @@ def call_llm_for_team_performance_comment(our_overall_rate: float, cluster_stats
         HumanMessage(content=human_prompt)
     ])
     
+    def validate_comment_response(response: str) -> str:
+        try:
+            json_output_raw = response
+            json_output = _extract_json_from_llm_response(json_output_raw)
+            llm_parsed_data = json.loads(json_output)
+            
+            comment = llm_parsed_data.get("comment", "")
+            if not comment:
+                raise ValueError("LLM이 빈 코멘트를 반환했습니다.")
+            
+            return comment
+            
+        except Exception as e:
+            logger.error(f"Comment validation failed: {e}")
+            # 폴백 코멘트
+            overall_comparison = get_comparison_result_detailed(
+                our_overall_rate, cluster_stats
+            )
+            return f"귀하의 팀은 종합 달성률 {our_overall_rate}%로 유사팀 평균({cluster_stats['avg_rate']}%) 대비 {overall_comparison} 성과를 보이고 있습니다. 유사팀 {similar_teams_count}개와의 비교 결과를 바탕으로 지속적인 성장을 위한 전략 수립이 필요합니다."
+    
     chain = prompt | llm_client
     
     try:
         response: AIMessage = chain.invoke({})
-        json_output_raw = response.content
-        json_output = _extract_json_from_llm_response(json_output_raw)
-        llm_parsed_data = json.loads(json_output)
-        
-        comment = llm_parsed_data.get("comment", "")
-        if not comment:
-            raise ValueError("LLM이 빈 코멘트를 반환했습니다.")
-        
-        return comment
+        content = str(response.content)
+        return validate_comment_response(content)
         
     except Exception as e:
-        print(f"LLM 호출 실패: {e}")
+        logger.error(f"LLM 호출 실패: {e}")
         # 폴백 코멘트
         overall_comparison = get_comparison_result_detailed(
             our_overall_rate, cluster_stats
         )
         return f"귀하의 팀은 종합 달성률 {our_overall_rate}%로 유사팀 평균({cluster_stats['avg_rate']}%) 대비 {overall_comparison} 성과를 보이고 있습니다. 유사팀 {similar_teams_count}개와의 비교 결과를 바탕으로 지속적인 성장을 위한 전략 수립이 필요합니다."
 
-# --- DB 저장 함수 ---
+# ===== DB 저장 함수 =====
 
 def save_team_comparison_results(team_evaluation_id: int, comparison_json: Dict) -> bool:
     """팀 비교 결과 DB 저장"""
@@ -393,9 +450,7 @@ def save_team_comparison_results(team_evaluation_id: int, comparison_json: Dict)
         connection.commit()
         return result.rowcount > 0
 
-# --- 서브모듈 함수 정의 ---
-
-# --- 서브모듈 함수 정의 ---
+# ===== 서브모듈 함수 정의 =====
 
 def check_cluster_stats_submodule(state: Module8AgentState) -> Module8AgentState:
     """1. 클러스터 통계 존재 확인"""
@@ -409,10 +464,10 @@ def check_cluster_stats_submodule(state: Module8AgentState) -> Module8AgentState
     
     if status["cache_file_exists"]:
         message = f"클러스터 통계 확인 완료: 기존 캐시 사용 (Q{period_id})"
-        print(f"✅ 클러스터 캐시 파일 존재 - Q{period_id}")
+        logger.info(f"✅ 클러스터 캐시 파일 존재 - Q{period_id}")
     else:
         message = f"클러스터 통계 없음: 새로 계산 예정 (Q{period_id})"
-        print(f"📊 클러스터 분석 필요 - Q{period_id}")
+        logger.info(f"📊 클러스터 분석 필요 - Q{period_id}")
     
     return {
         **state,
@@ -424,14 +479,14 @@ def calculate_cluster_stats_submodule(state: Module8AgentState) -> Module8AgentS
     team_id = state["team_id"]
     period_id = state["period_id"]
     
-    print(f"🔄 클러스터 분석 시작 - 팀 {team_id}")
+    logger.info(f"🔄 클러스터 분석 시작 - 팀 {team_id}")
     
     # TeamPerformanceComparator로 클러스터 분석 실행
     comparator = TeamPerformanceComparator(cache_dir=CACHE_DIR)
     result_data = comparator.analyze_team_cluster_performance(team_id, period_id)
     
     if not result_data["success"]:
-        print(f"❌ 클러스터 분석 실패: {result_data['error']}")
+        logger.error(f"❌ 클러스터 분석 실패: {result_data['error']}")
         return {
             **state,
             "messages": state.get("messages", []) + [
@@ -440,7 +495,7 @@ def calculate_cluster_stats_submodule(state: Module8AgentState) -> Module8AgentS
         }
     
     team_cluster_info = result_data["team_cluster_info"]
-    print(f"✅ 클러스터 분석 완료 - 클러스터 {team_cluster_info['cluster_id']}, 유사팀 {len(team_cluster_info['similar_teams'])}개")
+    logger.info(f"✅ 클러스터 분석 완료 - 클러스터 {team_cluster_info['cluster_id']}, 유사팀 {len(team_cluster_info['similar_teams'])}개")
     
     return {
         **state,
@@ -458,12 +513,12 @@ def team_performance_collection_submodule(state: Module8AgentState) -> Module8Ag
     period_id = state["period_id"]
     similar_teams = state["similar_teams"]
     
-    print(f"📋 성과 데이터 수집 중 - 팀 {team_id} + 유사팀 {len(similar_teams)}개")
+    logger.info(f"📋 성과 데이터 수집 중 - 팀 {team_id} + 유사팀 {len(similar_teams)}개")
     
     # 우리팀 데이터 수집
     our_team_data = fetch_team_kpis_data(team_id, period_id)
     if not our_team_data:
-        print(f"❌ 우리팀 데이터 조회 실패 - 팀 {team_id}")
+        logger.error(f"❌ 우리팀 데이터 조회 실패 - 팀 {team_id}")
         return {
             **state,
             "messages": state.get("messages", []) + [
@@ -474,7 +529,7 @@ def team_performance_collection_submodule(state: Module8AgentState) -> Module8Ag
     # 유사팀들 KPI 데이터 수집
     similar_teams_kpis = fetch_multiple_teams_kpis(similar_teams)
     
-    print(f"✅ 성과 데이터 수집 완료 - 우리팀 KPI {len(our_team_data['kpis'])}개, 유사팀 KPI {len(similar_teams_kpis)}개")
+    logger.info(f"✅ 성과 데이터 수집 완료 - 우리팀 KPI {len(our_team_data['kpis'])}개, 유사팀 KPI {len(similar_teams_kpis)}개")
     
     return {
         **state,
@@ -491,7 +546,7 @@ def kpi_comparison_submodule(state: Module8AgentState) -> Module8AgentState:
     our_team_kpis = state["our_team_kpis"]
     similar_teams_performance = state["similar_teams_performance"]
     
-    print(f"🔍 KPI 비교 분석 중 - {len(our_team_kpis)}개 KPI")
+    logger.info(f"🔍 KPI 비교 분석 중 - {len(our_team_kpis)}개 KPI")
     
     # KPI별 비교 분석 실행
     kpi_comparison_results = compare_kpis_with_similar_teams(our_team_kpis, similar_teams_performance)
@@ -499,7 +554,7 @@ def kpi_comparison_submodule(state: Module8AgentState) -> Module8AgentState:
     # 비교 가능한 KPI 개수 계산
     comparable_kpis = len([kpi for kpi in kpi_comparison_results if kpi["comparison_result"] != "-"])
     
-    print(f"✅ KPI 비교 분석 완료 - {len(kpi_comparison_results)}개 중 {comparable_kpis}개 비교 가능")
+    logger.info(f"✅ KPI 비교 분석 완료 - {len(kpi_comparison_results)}개 중 {comparable_kpis}개 비교 가능")
     
     return {
         **state,
@@ -516,7 +571,7 @@ def generate_team_comment_submodule(state: Module8AgentState) -> Module8AgentSta
     kpi_comparison_results = state["kpi_comparison_results"]
     similar_teams = state["similar_teams"]
     
-    print(f"🤖 LLM 코멘트 생성 중 - 종합 달성률 {our_team_overall_rate}%")
+    logger.info(f"🤖 LLM 코멘트 생성 중 - 종합 달성률 {our_team_overall_rate}%")
     
     # LLM으로 팀 성과 코멘트 생성
     team_comment = call_llm_for_team_performance_comment(
@@ -535,7 +590,7 @@ def generate_team_comment_submodule(state: Module8AgentState) -> Module8AgentSta
         "kpis": kpi_comparison_results
     }
     
-    print(f"✅ LLM 코멘트 생성 완료 - {len(team_comment)}자")
+    logger.info(f"✅ LLM 코멘트 생성 완료 - {len(team_comment)}자")
     
     return {
         **state,
@@ -552,13 +607,13 @@ def save_results_submodule(state: Module8AgentState) -> Module8AgentState:
     period_id = state["period_id"]
     final_comparison_json = state["final_comparison_json"]
     
-    print(f"💾 DB 저장 중 - 팀 {team_id}")
+    logger.info(f"💾 DB 저장 중 - 팀 {team_id}")
     
     # team_evaluation_id 조회
     team_evaluation_id = fetch_team_evaluation_id(team_id, period_id)
     
     if not team_evaluation_id:
-        print(f"❌ team_evaluation_id 조회 실패 - 팀 {team_id}, Q{period_id}")
+        logger.error(f"❌ team_evaluation_id 조회 실패 - 팀 {team_id}, Q{period_id}")
         return {
             **state,
             "messages": state.get("messages", []) + [
@@ -570,7 +625,7 @@ def save_results_submodule(state: Module8AgentState) -> Module8AgentState:
     success = save_team_comparison_results(team_evaluation_id, final_comparison_json)
     
     if success:
-        print(f"✅ DB 저장 완료 - team_evaluations[{team_evaluation_id}]")
+        logger.info(f"✅ DB 저장 완료 - team_evaluations[{team_evaluation_id}]")
         return {
             **state,
             "messages": state.get("messages", []) + [
@@ -579,7 +634,7 @@ def save_results_submodule(state: Module8AgentState) -> Module8AgentState:
             "updated_team_evaluation_id": team_evaluation_id
         }
     else:
-        print(f"❌ DB 저장 실패 - team_evaluations[{team_evaluation_id}]")
+        logger.error(f"❌ DB 저장 실패 - team_evaluations[{team_evaluation_id}]")
         return {
             **state,
             "messages": state.get("messages", []) + [
@@ -587,7 +642,7 @@ def save_results_submodule(state: Module8AgentState) -> Module8AgentState:
             ]
         }
 
-# --- LangGraph 워크플로우 구성 ---
+# ===== LangGraph 워크플로우 구성 =====
 
 # 모듈 8 워크플로우 정의
 module8_workflow = StateGraph(Module8AgentState)
@@ -609,63 +664,161 @@ module8_workflow.add_edge("kpi_comparison", "generate_team_comment")
 module8_workflow.add_edge("generate_team_comment", "save_results")
 module8_workflow.add_edge("save_results", END)
 
-
 # 모듈 8 그래프 컴파일
 module8_graph = module8_workflow.compile()
 
-# --- 실행 함수 ---
+# ===== 메인 파이프라인 함수 =====
 
-def run_module8_evaluation(team_id: int, period_id: int, report_type: str = "quarterly"):
+def execute_module8_pipeline(team_id: int, period_id: int, report_type: str = "quarterly") -> Dict[str, Any]:
     """모듈 8 팀 성과 비교 평가 실행"""
     
-    initial_state = {
-        "team_id": team_id,
-        "period_id": period_id,
-        "report_type": report_type,
-        "messages": []
-    }
-    
-    print(f"🚀 모듈 8: 팀 성과 비교 분석 시작 (팀 {team_id}, Q{period_id})")
+    start_time = datetime.now()
+    logger.info(f"\n{'='*60}")
+    logger.info(f"🚀 모듈 8: 팀 성과 비교 분석 시작")
+    logger.info(f"{'='*60}")
+    logger.info(f"📍 설정 정보:")
+    logger.info(f"   팀 ID: {team_id}")
+    logger.info(f"   기간 ID: {period_id}")
+    logger.info(f"   리포트 타입: {report_type}")
     
     try:
+        initial_state = {
+            "team_id": team_id,
+            "period_id": period_id,
+            "report_type": report_type,
+            "messages": []
+        }
+        
+        logger.info(f"🚀 모듈 8: 팀 성과 비교 분석 시작 (팀 {team_id}, Q{period_id})")
+        
         result = module8_graph.invoke(initial_state)
         
-        print("\n✅ 모듈 8 실행 완료!")
-        print("📋 실행 과정:")
-        for i, message in enumerate(result.get("messages", []), 1):
-            print(f"  {i}. {message.content}")
+        execution_time = (datetime.now() - start_time).total_seconds()
         
-        return result
+        success_result = {
+            "status": "success",
+            "execution_time_seconds": execution_time,
+            "team_id": team_id,
+            "period_id": period_id,
+            "report_type": report_type,
+            "results": {
+                "cluster_id": result.get("our_team_cluster_id"),
+                "similar_teams_count": len(result.get("similar_teams", [])),
+                "overall_rate": result.get("our_team_overall_rate"),
+                "comment_length": len(result.get("team_performance_comment", "")),
+                "kpi_comparisons": len(result.get("kpi_comparison_results", [])),
+                "updated_team_evaluation_id": result.get("updated_team_evaluation_id")
+            },
+            "messages": [msg.content for msg in result.get("messages", [])]
+        }
+        
+        logger.info("\n✅ 모듈 8 실행 완료!")
+        logger.info("📋 실행 과정:")
+        for i, message in enumerate(result.get("messages", []), 1):
+            logger.info(f"  {i}. {message.content}")
+        
+        logger.info(f"\n📊 최종 결과:")
+        logger.info(f"클러스터 ID: {success_result['results']['cluster_id']}")
+        logger.info(f"유사팀 수: {success_result['results']['similar_teams_count']}")
+        logger.info(f"종합 달성률: {success_result['results']['overall_rate']}%")
+        logger.info(f"코멘트 길이: {success_result['results']['comment_length']}자")
+        logger.info(f"KPI 비교 결과: {success_result['results']['kpi_comparisons']}개")
+        logger.info(f"업데이트된 team_evaluation_id: {success_result['results']['updated_team_evaluation_id']}")
+        logger.info(f"⏱️  실행 시간: {execution_time:.2f}초")
+        logger.info(f"{'='*60}")
+        
+        return success_result
         
     except Exception as e:
-        print(f"\n❌ 모듈 8 실행 실패: {e}")
-        return None
+        execution_time = (datetime.now() - start_time).total_seconds()
+        error_result = {
+            "status": "error",
+            "execution_time_seconds": execution_time,
+            "error_message": str(e),
+            "error_type": type(e).__name__,
+            "team_id": team_id,
+            "period_id": period_id
+        }
+        
+        logger.error(f"\n❌ 모듈 8 실행 실패!")
+        logger.error(f"⏱️  실행 시간: {execution_time:.2f}초")
+        logger.error(f"💥 오류: {e}")
+        logger.error(f"🔍 오류 유형: {type(e).__name__}")
+        logger.error(f"{'='*60}")
+        
+        return error_result
 
-# --- 테스트 실행 ---
+# ===== 테스트 및 실행 함수 =====
 
-def test_module8():
+def test_module8() -> Optional[Dict]:
     """모듈 8 테스트 실행"""
-    print("=== 모듈 8 테스트 시작 ===")
+    logger.info("=== 모듈 8 테스트 시작 ===")
     
     # 기본 테스트
-    result = run_module8_evaluation(team_id=1, period_id=2, report_type="quarterly")
+    result = execute_module8_pipeline(team_id=1, period_id=2, report_type="quarterly")
     
-    if result:
-        print(f"\n📊 최종 결과:")
-        print(f"클러스터 ID: {result.get('our_team_cluster_id', 'N/A')}")
-        print(f"유사팀 수: {len(result.get('similar_teams', []))}")
-        print(f"종합 달성률: {result.get('our_team_overall_rate', 'N/A')}%")
-        print(f"코멘트 길이: {len(result.get('team_performance_comment', ''))}자")
-        
-        if 'final_comparison_json' in result:
-            print(f"KPI 비교 결과: {len(result['final_comparison_json'].get('kpis', []))}개")
+    if result and result.get("status") == "success":
+        logger.info(f"\n📊 최종 테스트 결과:")
+        logger.info(f"상태: {result['status']}")
+        logger.info(f"실행 시간: {result['execution_time_seconds']:.2f}초")
+        logger.info(f"클러스터 ID: {result['results']['cluster_id']}")
+        logger.info(f"유사팀 수: {result['results']['similar_teams_count']}")
+        logger.info(f"종합 달성률: {result['results']['overall_rate']}%")
+        logger.info(f"코멘트 길이: {result['results']['comment_length']}자")
+        logger.info(f"KPI 비교 결과: {result['results']['kpi_comparisons']}개")
+        logger.info(f"업데이트된 team_evaluation_id: {result['results']['updated_team_evaluation_id']}")
         
         return result
     else:
-        print("테스트 실패!")
+        logger.error("테스트 실패!")
+        if result:
+            logger.error(f"오류: {result.get('error_message', 'Unknown error')}")
+            logger.error(f"오류 유형: {result.get('error_type', 'Unknown')}")
         return None
 
-# 실행
+# ===== 메인 실행 부분 =====
+
 if __name__ == "__main__":
-    # 자동 테스트 실행
-    result = test_module8() 
+    # 테스트 케이스들
+    test_cases = [
+        {"team_id": 1, "period_id": 2, "report_type": "quarterly", "desc": "Q2 분기별"},
+        {"team_id": 1, "period_id": 4, "report_type": "annual_manager", "desc": "Q4 연말"}
+    ]
+
+    for test_case in test_cases:
+        logger.info(f"\n🧪 모듈8 테스트 실행 - {test_case['desc']}")
+        logger.info(f"   테스트 팀: {test_case['team_id']}")
+        logger.info(f"   테스트 기간: Q{test_case['period_id']}")
+        logger.info(f"   리포트 타입: {test_case['report_type']}")
+        
+        try:
+            result = execute_module8_pipeline(
+                test_case['team_id'], 
+                test_case['period_id'], 
+                test_case['report_type']
+            )
+            
+            if result.get('status') == 'success':
+                logger.info(f"\n🎉 테스트 성공!")
+                logger.info(f"📊 실행 결과 요약:")
+                logger.info(f"   • 상태: {result['status']}")
+                logger.info(f"   • 실행 시간: {result['execution_time_seconds']:.2f}초")
+                logger.info(f"   • 클러스터 ID: {result['results']['cluster_id']}")
+                logger.info(f"   • 유사팀 수: {result['results']['similar_teams_count']}")
+                logger.info(f"   • 종합 달성률: {result['results']['overall_rate']}%")
+                logger.info(f"   • 코멘트 길이: {result['results']['comment_length']}자")
+                logger.info(f"   • KPI 비교 수: {result['results']['kpi_comparisons']}개")
+                logger.info(f"   • 업데이트된 team_evaluation_id: {result['results']['updated_team_evaluation_id']}")
+            else:
+                logger.error(f"\n❌ 테스트 실패!")
+                logger.error(f"   • 오류: {result.get('error_message', 'Unknown error')}")
+                logger.error(f"   • 오류 유형: {result.get('error_type', 'Unknown')}")
+            
+        except Exception as e:
+            logger.error(f"\n💥 테스트 실행 중 예외 발생: {e}")
+            import traceback
+            traceback.print_exc()
+    
+    logger.info(f"\n{'='*60}")
+    logger.info("🏁 모듈8 테스트 완료")
+    logger.info(f"{'='*60}")
