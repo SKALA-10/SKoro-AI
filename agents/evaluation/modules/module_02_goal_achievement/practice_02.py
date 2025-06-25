@@ -42,6 +42,12 @@ from sqlalchemy.engine import Row
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+# httpx 및 관련 라이브러리 로그 레벨 조정 (HTTP 요청 로그 숨김)
+logging.getLogger("httpx").setLevel(logging.WARNING)
+logging.getLogger("openai").setLevel(logging.WARNING)
+logging.getLogger("langchain").setLevel(logging.WARNING)
+logging.getLogger("langchain_openai").setLevel(logging.WARNING)
+
 # DB 및 LLM 설정
 db_config = DatabaseConfig()
 DATABASE_URL = db_config.DATABASE_URL
@@ -1035,8 +1041,8 @@ def calculate_team_kpi_achievement_rate(kpi_id: int, period_id: int, kpi_data: D
         
         JSON 답변:
         {{
-          "kpi_overall_rate": [팀 KPI 달성률 0-200%],
-          "kpi_analysis_comment": "[현재 KPI 달성 상태 분석]"
+            "kpi_overall_rate": [팀 KPI 달성률 0-200%],
+            "kpi_analysis_comment": "[현재 KPI 달성 상태 분석]"
         }}
         """)
     ])
@@ -1075,32 +1081,41 @@ def calculate_team_average_achievement_rate(team_kpi_ids: List[int]) -> float:
     return safe_divide(weighted_sum, total_weight, 80.0)
 
 def calculate_year_over_year_growth(team_id: int, current_period_id: int, current_rate: float) -> Optional[float]:
-    """전년 대비 성장률 계산"""
+    """전년 대비 성장률 계산 (periods 테이블 활용)"""
     try:
-        # 전년도 동일 분기 조회 시도
         with engine.connect() as connection:
-            query = text("""
-                SELECT average_achievement_rate 
-                FROM team_evaluations 
-                WHERE team_id = :team_id 
-                AND period_id = :last_year_period_id
-            """)
-            # 간단히 period_id - 4 (분기 기준)로 계산
-            last_year_period_id = current_period_id - 4
-            
-            result = connection.execute(query, {
-                "team_id": team_id,
-                "last_year_period_id": last_year_period_id
-            })
-            last_year_rate = result.scalar_one_or_none()
-            
+            # 현재 period의 연도 조회
+            cur_period_year = connection.execute(
+                text("SELECT year FROM periods WHERE period_id = :pid"),
+                {"pid": current_period_id}
+            ).scalar_one_or_none()
+            if not cur_period_year:
+                return None
+
+            # 전년도 연말 period_id 조회
+            last_year = cur_period_year - 1
+            last_period_id = connection.execute(
+                text("SELECT period_id FROM periods WHERE year = :y AND is_final = 1"),
+                {"y": last_year}
+            ).scalar_one_or_none()
+            if not last_period_id:
+                return None
+
+            # 전년도 연말 팀 성과 조회
+            last_year_rate = connection.execute(
+                text("""
+                    SELECT average_achievement_rate
+                    FROM team_evaluations
+                    WHERE team_id = :team_id AND period_id = :period_id
+                """),
+                {"team_id": team_id, "period_id": last_period_id}
+            ).scalar_one_or_none()
+
             if last_year_rate and last_year_rate > 0:
                 growth = ((current_rate - last_year_rate) / last_year_rate) * 100
                 return round(growth, 2)
-            
     except Exception as e:
         logger.warning(f"Year-over-year calculation failed: {e}")
-    
     return None
 
 # ===== 팀 일관성 가이드 생성 함수 =====
@@ -1388,12 +1403,13 @@ class CommentGenerator:
         def validate_comment(response: str) -> str:
             response = response.strip()
             
-            # 길이 검증
+            # 길이 검증 (경고 로그 제거)
             target_length = self.config.get('length', {}).get('target', 250)
             tolerance = self.config.get('length', {}).get('tolerance', 30)
             
-            if not (target_length - tolerance <= len(response) <= target_length + tolerance):
-                logger.warning(f"Comment length {len(response)} outside target {target_length}±{tolerance}")
+            # 길이 검증은 하되 경고 로그는 출력하지 않음
+            # if not (target_length - tolerance <= len(response) <= target_length + tolerance):
+            #     logger.warning(f"Comment length {len(response)} outside target {target_length}±{tolerance}")
             
             return response
         
@@ -1924,8 +1940,8 @@ def execute_module2_pipeline(period_id: int, team_id: int) -> Dict[str, Any]:
 if __name__ == "__main__":
     # 테스트 실행
     test_cases = [
-        # {"period_id": 4, "team_id": 1, "desc": "Q4 (연말)"},
-        {"period_id": 2, "team_id": 1, "desc": "Q2 (2분기)"}
+        {"period_id": 4, "team_id": 1, "desc": "Q4 (연말)"},
+        # {"period_id": 2, "team_id": 1, "desc": "Q2 (2분기)"}
     ]
 
     for test in test_cases:
