@@ -244,7 +244,7 @@ class Module11TeamRiskManagementAgent:
 
         try:
             response = await asyncio.to_thread(self.llm_client.invoke, prompt)
-            result_json = extract_json_from_llm_response(response.content)
+            result_json = extract_json_from_llm_response(str(response.content))
             final_result = json.loads(result_json)
             
             # 추가 검증 및 후처리
@@ -326,7 +326,7 @@ class Module11TeamRiskManagementAgent:
 
         try:
             response = await asyncio.to_thread(self.llm_client.invoke, prompt)
-            result_json = extract_json_from_llm_response(response.content)
+            result_json = extract_json_from_llm_response(str(response.content))
             return json.loads(result_json)
         except Exception as e:
             logger.error(f"협업 리스크 LLM 분석 실패: {str(e)}")
@@ -405,7 +405,7 @@ class Module11TeamRiskManagementAgent:
 
         try:
             response = await asyncio.to_thread(self.llm_client.invoke, prompt)
-            result_json = extract_json_from_llm_response(response.content)
+            result_json = extract_json_from_llm_response(str(response.content))
             return json.loads(result_json)
         except Exception as e:
             logger.error(f"개인 리스크 LLM 분석 실패: {str(e)}")
@@ -480,7 +480,7 @@ class Module11TeamRiskManagementAgent:
 
         try:
             response = await asyncio.to_thread(self.llm_client.invoke, prompt)
-            result_json = extract_json_from_llm_response(response.content)
+            result_json = extract_json_from_llm_response(str(response.content))
             return json.loads(result_json)
         except Exception as e:
             logger.error(f"성과 트렌드 LLM 분석 실패: {str(e)}")
@@ -612,7 +612,7 @@ class Module11TeamRiskManagementAgent:
         
         try:
             response = await asyncio.to_thread(self.llm_client.invoke, prompt)
-            result_json = extract_json_from_llm_response(response.content)
+            result_json = extract_json_from_llm_response(str(response.content))
             final_result = json.loads(result_json)
             
             # 구조 검증
@@ -698,7 +698,7 @@ class Module11TeamRiskManagementAgent:
 
         try:
             response = await asyncio.to_thread(self.llm_client.invoke, prompt)
-            result = response.content.strip()
+            result = str(response.content).strip()
             
             # 내용 품질 검증
             if len(result) < 300:
@@ -766,7 +766,7 @@ class Module11TeamRiskManagementAgent:
 
         try:
             response = await asyncio.to_thread(self.llm_client.invoke, prompt)
-            result = response.content.strip()
+            result = str(response.content).strip()
             
             # 내용 품질 검증
             if len(result) < 200:
