@@ -5,7 +5,7 @@ import asyncio
 import json
 import logging
 from datetime import datetime
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, List
 
 from db_utils import init_database, DatabaseError
 from agent import Module11TeamRiskManagementAgent, Module11AgentState
@@ -131,11 +131,18 @@ async def test_individual_components():
             period_id: int = TEST_PERIOD_ID
             team_evaluation_id: int = TEST_TEAM_EVALUATION_ID
             is_final: bool = True
-            key_risks: list = None
-            collaboration_bias_level: str = None
-            ai_risk_result: dict = None
+            key_risks: Optional[List] = None
+            collaboration_bias_level: Optional[str] = None
+            ai_risk_result: Optional[Dict[str, Any]] = None
         
-        state = TestState()
+        # 실제 Module11AgentState 사용
+        from agent import Module11AgentState
+        state = Module11AgentState(
+            team_id=TEST_TEAM_ID,
+            period_id=TEST_PERIOD_ID,
+            team_evaluation_id=TEST_TEAM_EVALUATION_ID,
+            is_final=True
+        )
         
         # 실제 데이터 수집
         print("📊 실제 데이터 수집 중...")
@@ -477,13 +484,13 @@ async def run_all_tests():
     }
 
 # ====================================
-# 실행 테스트 파라미터 (각자 DB에 맞춰서 바꾸세요. 일단 서버DB test data 기준)
+# 실행 테스트 파라미터 (실제 DB 데이터 기준으로 수정)
 # ====================================
 
-# 실제 존재하는 데이터
-TEST_TEAM_ID = 900001  # AI핵심기술팀
-TEST_PERIOD_ID = 800007  # 2025년 4분기 (연말)
-TEST_TEAM_EVALUATION_ID = 700001  # 해당 팀 평가
+# 실제 존재하는 데이터 (퍼포먼스마케팅팀의 2024년 연말 평가)
+TEST_TEAM_ID = 600000  # 퍼포먼스마케팅팀
+TEST_PERIOD_ID = 4     # 2024년 연말
+TEST_TEAM_EVALUATION_ID = 2400000  # 해당 팀 평가
 
 # ====================================
 # 메인 실행 부분

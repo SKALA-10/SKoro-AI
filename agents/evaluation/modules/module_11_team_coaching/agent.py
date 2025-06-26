@@ -13,7 +13,8 @@ from llm_utils import (
     init_llm_client, parse_json_field, extract_json_from_llm_response,
     validate_risk_json_structure, validate_plan_json_structure,
     create_fallback_risk_analysis, create_fallback_annual_plan,
-    create_fallback_annual_comment_text, create_fallback_quarterly_comment_text
+    create_fallback_annual_comment_text, create_fallback_quarterly_comment_text,
+    get_year_from_period
 )
 
 # 로깅 설정
@@ -547,7 +548,7 @@ class Module11TeamRiskManagementAgent:
                 }
         
         prompt = f"""
-당신은 팀 운영 전략 수립 전문가입니다. 다음 종합 데이터를 바탕으로 차년도({period_info.get('year', 2024) + 1}년) 팀 운영 계획을 수립해주세요.
+당신은 팀 운영 전략 수립 전문가입니다. 다음 종합 데이터를 바탕으로 차년도({period_info.get('year', get_year_from_period(state.period_id)) + 1}년) 팀 운영 계획을 수립해주세요.
 
 ## 팀 기본 정보:
 {json.dumps(team_info, ensure_ascii=False, indent=2)}

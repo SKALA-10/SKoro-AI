@@ -154,6 +154,24 @@ def validate_plan_json_structure(result: Dict) -> bool:
 # 폴백 데이터 생성 함수들
 # ====================================
 
+def get_year_from_period(period_id: int) -> int:
+    """period_id로 연도 조회"""
+    try:
+        from sqlalchemy import create_engine, text
+        from config.settings import DatabaseConfig
+        
+        db_config = DatabaseConfig()
+        DATABASE_URL = db_config.DATABASE_URL
+        engine = create_engine(DATABASE_URL, pool_pre_ping=True)
+        
+        with engine.connect() as connection:
+            query = text("SELECT year FROM periods WHERE period_id = :period_id")
+            result = connection.execute(query, {"period_id": period_id}).scalar_one_or_none()
+            return result if result else 2024  # fallback
+    except Exception as e:
+        logger.warning(f"연도 조회 실패: {e}, fallback 사용")
+        return 2024
+
 def create_fallback_risk_analysis() -> Dict[str, Any]:
     """개선된 폴백 리스크 분석"""
     from datetime import datetime
@@ -191,7 +209,13 @@ def create_fallback_risk_analysis() -> Dict[str, Any]:
 def create_fallback_annual_plan(period_info: Dict) -> Dict[str, Any]:
     """개선된 폴백 연말 계획"""
     
-    next_year = period_info.get('year', 2024) + 1
+    # period_id가 있으면 동적으로 연도 계산, 없으면 period_info에서 가져오기
+    if 'period_id' in period_info:
+        current_year = get_year_from_period(period_info['period_id'])
+    else:
+        current_year = period_info.get('year', 2024)
+    
+    next_year = current_year + 1
     
     return {
         "annual_plans": [
