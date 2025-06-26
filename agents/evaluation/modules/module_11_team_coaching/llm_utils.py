@@ -167,10 +167,10 @@ def get_year_from_period(period_id: int) -> int:
         with engine.connect() as connection:
             query = text("SELECT year FROM periods WHERE period_id = :period_id")
             result = connection.execute(query, {"period_id": period_id}).scalar_one_or_none()
-            return result if result else 2024  # fallback
+            return result if result else 2025  # fallback
     except Exception as e:
         logger.warning(f"연도 조회 실패: {e}, fallback 사용")
-        return 2024
+        return 2025
 
 def create_fallback_risk_analysis() -> Dict[str, Any]:
     """개선된 폴백 리스크 분석"""
@@ -213,7 +213,7 @@ def create_fallback_annual_plan(period_info: Dict) -> Dict[str, Any]:
     if 'period_id' in period_info:
         current_year = get_year_from_period(period_info['period_id'])
     else:
-        current_year = period_info.get('year', 2024)
+        current_year = period_info.get('year', 2025)
     
     next_year = current_year + 1
     

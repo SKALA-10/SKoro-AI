@@ -33,7 +33,7 @@ def get_year_from_period(period_id: int) -> int:
     with engine.connect() as connection:
         query = text("SELECT year FROM periods WHERE period_id = :period_id")
         result = connection.execute(query, {"period_id": period_id}).scalar_one_or_none()
-        return result if result else 2024  # fallback
+        return result if result else 2025  # fallback
 
 # ================================================================
 # 데이터 조회 함수들
