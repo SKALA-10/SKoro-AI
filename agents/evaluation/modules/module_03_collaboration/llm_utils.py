@@ -4,7 +4,7 @@
 
 import re
 import json
-from typing import Dict, List
+from typing import Dict, List, Optional
 from langchain_openai import ChatOpenAI
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.messages import HumanMessage, SystemMessage, AIMessage
@@ -336,8 +336,22 @@ def call_llm_for_overall_evaluation(collaboration_analysis: Dict, emp_name: str,
         print(f"LLM 종합 평가 오류: {e}")
         return f"{emp_name}({emp_no})님의 협업 분석에 오류가 발생했습니다."
 
-def call_llm_for_team_summary(collaboration_matrix: List[Dict], team_summary_stats: Dict) -> str:
+def call_llm_for_team_summary(collaboration_matrix: List[Dict], team_summary_stats: Optional[Dict] = None) -> str:
     """팀 협업 매트릭스 전체를 기반으로 종합적인 팀 요약 코멘트를 생성합니다."""
+    
+    # team_summary_stats가 제공되지 않은 경우 collaboration_matrix에서 계산
+    if team_summary_stats is None:
+        total_members = len(collaboration_matrix)
+        avg_collaboration_rate = sum([item["collaboration_rate"] for item in collaboration_matrix]) / total_members if total_members > 0 else 0
+        avg_contribution_score = sum([item["avg_contribution_score"] for item in collaboration_matrix]) / total_members if total_members > 0 else 0
+        high_bias_members = [item["name"] for item in collaboration_matrix if "과의존 위험" in item.get("collaboration_bias", "")]
+        
+        team_summary_stats = {
+            "avg_collaboration_rate": avg_collaboration_rate,
+            "avg_contribution_score": avg_contribution_score,
+            "high_bias_members": high_bias_members,
+            "total_members": total_members
+        }
     
     system_prompt = """
     당신은 SK조직의 팀 협업 분석 전문가입니다.

@@ -163,3 +163,39 @@ def fetch_feedback_report_data(emp_no: str, period_id: int) -> Optional[Dict]:
         """)
         result = connection.execute(query, {"emp_no": emp_no, "period_id": period_id}).fetchone()
         return row_to_dict(result) if result else None
+
+def fetch_team_evaluation_id(team_id: int, period_id: int) -> Optional[int]:
+    """team_evaluations에서 ID 조회"""
+    with engine.connect() as connection:
+        query = text("""
+            SELECT team_evaluation_id FROM team_evaluations 
+            WHERE team_id = :team_id AND period_id = :period_id
+        """)
+        result = connection.execute(query, {"team_id": team_id, "period_id": period_id})
+        return result.scalar_one_or_none()
+
+def fetch_team_tasks_and_kpis(team_id: int, period_id: int):
+    """팀의 Task와 KPI ID 조회"""
+    with engine.connect() as connection:
+        # 해당 팀의 해당 기간 Task ID
+        task_query = text("""
+            SELECT t.task_id FROM tasks t
+            JOIN employees e ON t.emp_no = e.emp_no
+            WHERE e.team_id = :team_id
+        """)
+        task_ids = [row[0] for row in connection.execute(task_query, {"team_id": team_id})]
+        
+        # period_id로 연도 조회
+        year_query = text("SELECT year FROM periods WHERE period_id = :period_id")
+        year = connection.execute(year_query, {"period_id": period_id}).scalar_one_or_none()
+        
+        # 해당 팀의 해당 연도 KPI ID만 조회
+        kpi_query = text("""
+            SELECT team_kpi_id FROM team_kpis 
+            WHERE team_id = :team_id AND year = :year
+        """)
+        kpi_ids = [row[0] for row in connection.execute(kpi_query, {
+            "team_id": team_id, 
+            "year": year
+        })]
+        return task_ids, kpi_ids

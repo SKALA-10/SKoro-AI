@@ -2,16 +2,18 @@
 # agent_module3.py - 모듈 3 LangGraph 에이전트 및 상태 관리
 # ================================================================
 
-from typing import Annotated, List, Literal, TypedDict, Dict
+from typing import Annotated, List, Literal, TypedDict, Dict, Optional
 from langchain_core.messages import HumanMessage
 import operator
 from langgraph.graph import StateGraph, START, END
+from dataclasses import dataclass
 
 from db_utils import (
     fetch_collaboration_tasks_by_kpi,
     fetch_peer_talk_summary,
     fetch_team_members_with_tasks,
-    save_collaboration_matrix_to_db
+    save_collaboration_matrix_to_db,
+    fetch_team_evaluation_id
 )
 
 from llm_utils import (
@@ -24,30 +26,34 @@ from llm_utils import (
 )
 
 # ================================================================
-# Module3AgentState 정의
+# Module3State 정의 (모듈 2와 일관된 구조)
 # ================================================================
 
-class Module3AgentState(TypedDict):
-    """
-    모듈 3 (협업 분석 모듈)의 내부 상태를 정의합니다.
-    이 상태는 모듈 3 내의 모든 서브모듈이 공유하고 업데이트합니다.
-    """
-    messages: Annotated[List[HumanMessage], operator.add]
+@dataclass
+class Module3State:
+    """모듈 3 협업 분석 State - 모듈 2와 일관된 DB 기반 전달 방식"""
+    # 기본 정보
     report_type: Literal["quarterly", "annual"]
     team_id: int
     period_id: int
-    target_task_summary_ids: List[int]
+    
+    # 타겟 ID들
     target_team_kpi_ids: List[int]
-    team_evaluation_id: int
-    collaboration_relationships: List[Dict]
-    individual_collaboration_analysis: Dict[str, Dict]
-    team_collaboration_matrix: Dict
+    
+    # 처리 결과 추적용 (DB ID만 저장)
+    collaboration_relationships: Optional[List[Dict]] = None
+    individual_collaboration_analysis: Optional[Dict[str, Dict]] = None
+    team_collaboration_matrix: Optional[Dict] = None
+    team_evaluation_id: Optional[int] = None
+    
+    # 메시지 추적용 (LangGraph 호환성)
+    messages: Optional[List[HumanMessage]] = None
 
 # ================================================================
 # 서브모듈 함수들
 # ================================================================
 
-def collaboration_data_collection_submodule(state: Module3AgentState) -> Module3AgentState:
+def collaboration_data_collection_submodule(state: Module3State) -> Module3State:
     """
     협업 분석을 위한 기초 데이터를 수집합니다.
     - 동일 KPI 내 Task 그룹핑
@@ -55,14 +61,18 @@ def collaboration_data_collection_submodule(state: Module3AgentState) -> Module3
     """
     print("=== 모듈 3: 협업 데이터 수집 시작 ===")
     
-    target_team_kpi_ids = state["target_team_kpi_ids"]
-    period_id = state["period_id"]
+    # team_evaluation_id 확인/생성
+    team_evaluation_id = fetch_team_evaluation_id(state.team_id, state.period_id)
+    if not team_evaluation_id:
+        raise Exception(f"team_evaluation_id not found for team {state.team_id}, period {state.period_id}")
+    
+    state.team_evaluation_id = team_evaluation_id
     
     collaboration_relationships = []
     
     # 각 KPI별로 협업 관계 1차 구성
-    for team_kpi_id in target_team_kpi_ids:
-        kpi_tasks = fetch_collaboration_tasks_by_kpi(team_kpi_id, period_id)
+    for team_kpi_id in state.target_team_kpi_ids:
+        kpi_tasks = fetch_collaboration_tasks_by_kpi(team_kpi_id, state.period_id)
         
         if len(kpi_tasks) > 1:  # 2개 이상 Task가 있어야 협업 가능
             for task in kpi_tasks:
@@ -85,48 +95,42 @@ def collaboration_data_collection_submodule(state: Module3AgentState) -> Module3
     
     print(f"총 {len(collaboration_relationships)}개 잠재적 협업 관계 수집 완료")
     
-    new_state = state.copy()
-    new_state["messages"] = [HumanMessage(content="모듈 3: 협업 데이터 수집 완료")]
-    new_state["collaboration_relationships"] = collaboration_relationships
-    return new_state
+    state.collaboration_relationships = collaboration_relationships
+    return state
 
-def individual_collaboration_analysis_submodule(state: Module3AgentState) -> Module3AgentState:
+def individual_collaboration_analysis_submodule(state: Module3State) -> Module3State:
     """
     Task Summary를 LLM으로 분석하여 실제 협업 관계를 확인하고,
     개인별 협업 패턴을 분석합니다.
     """
     print("=== 모듈 3: 개인 협업 분석 시작 ===")
     
-    collaboration_relationships = state["collaboration_relationships"]
-    team_id = state["team_id"]
-    period_id = state["period_id"]
-    report_type = state["report_type"]
-    
     # 1. LLM으로 실제 협업 관계 확인
     confirmed_collaborations = []
     
-    for relation in collaboration_relationships:
-        task_summary = relation["task_summary"]
-        potential_collaborators = relation["potential_collaborators"]
-        
-        if task_summary and potential_collaborators:
-            llm_collaboration_result = call_llm_for_collaboration_detection(
-                task_summary=task_summary,
-                task_name=relation["task_name"],
-                potential_collaborators=potential_collaborators,
-                emp_name=relation["emp_name"]
-            )
+    if state.collaboration_relationships:
+        for relation in state.collaboration_relationships:
+            task_summary = relation["task_summary"]
+            potential_collaborators = relation["potential_collaborators"]
             
-            if llm_collaboration_result.get("is_collaboration", False):
-                confirmed_collaborations.append({
-                    **relation,
-                    "confirmed_collaborators": llm_collaboration_result.get("collaborators", []),
-                    "collaboration_description": llm_collaboration_result.get("description", ""),
-                    "collaboration_confirmed": True
-                })
+            if task_summary and potential_collaborators:
+                llm_collaboration_result = call_llm_for_collaboration_detection(
+                    task_summary=task_summary,
+                    task_name=relation["task_name"],
+                    potential_collaborators=potential_collaborators,
+                    emp_name=relation["emp_name"]
+                )
+                
+                if llm_collaboration_result.get("is_collaboration", False):
+                    confirmed_collaborations.append({
+                        **relation,
+                        "confirmed_collaborators": llm_collaboration_result.get("collaborators", []),
+                        "collaboration_description": llm_collaboration_result.get("description", ""),
+                        "collaboration_confirmed": True
+                    })
     
     # 2. 개인별 협업 패턴 분석
-    team_members = fetch_team_members_with_tasks(team_id, period_id)
+    team_members = fetch_team_members_with_tasks(state.team_id, state.period_id)
     individual_analysis = {}
     
     for member in team_members:
@@ -181,20 +185,18 @@ def individual_collaboration_analysis_submodule(state: Module3AgentState) -> Mod
     
     print(f"개인별 협업 분석 완료: {len(individual_analysis)}명")
     
-    new_state = state.copy()
-    new_state["messages"] = [HumanMessage(content="모듈 3: 개인 협업 분석 완료")]
-    new_state["individual_collaboration_analysis"] = individual_analysis
-    return new_state
+    state.individual_collaboration_analysis = individual_analysis
+    return state
 
-def team_collaboration_network_submodule(state: Module3AgentState) -> Module3AgentState:
+def team_collaboration_network_submodule(state: Module3State) -> Module3State:
     """
     팀 전체 협업 네트워크 매트릭스를 생성합니다.
     """
     print("=== 모듈 3: 팀 협업 네트워크 분석 시작 ===")
     
-    individual_analysis = state["individual_collaboration_analysis"]
-    period_id = state["period_id"]
-    report_type = state["report_type"]
+    individual_analysis = state.individual_collaboration_analysis or {}
+    period_id = state.period_id
+    report_type = state.report_type
     
     collaboration_matrix = []
     
@@ -276,13 +278,7 @@ def team_collaboration_network_submodule(state: Module3AgentState) -> Module3Age
     avg_contribution_score = sum([item["avg_contribution_score"] for item in collaboration_matrix]) / total_members if total_members > 0 else 0
     high_bias_members = [item["name"] for item in collaboration_matrix if "과의존 위험" in item["collaboration_bias"]]
     
-    team_summary_stats = {
-        "avg_collaboration_rate": avg_collaboration_rate,
-        "avg_contribution_score": avg_contribution_score,
-        "high_bias_members": high_bias_members,
-        "total_members": total_members
-    }
-    team_summary = call_llm_for_team_summary(collaboration_matrix, team_summary_stats)
+    team_summary = call_llm_for_team_summary(collaboration_matrix)
     
     # 최종 결과 구성
     team_collaboration_matrix = {
@@ -297,43 +293,39 @@ def team_collaboration_network_submodule(state: Module3AgentState) -> Module3Age
     
     print(f"팀 협업 네트워크 매트릭스 생성 완료: {total_members}명")
     
-    new_state = state.copy()
-    new_state["messages"] = [HumanMessage(content="모듈 3: 팀 협업 네트워크 분석 완료")]
-    new_state["team_collaboration_matrix"] = team_collaboration_matrix
-    return new_state
+    state.team_collaboration_matrix = team_collaboration_matrix
+    return state
 
-def collaboration_comprehensive_analysis_submodule(state: Module3AgentState) -> Module3AgentState:
+def collaboration_comprehensive_analysis_submodule(state: Module3State) -> Module3State:
     """
     협업 기여도 종합 분석 (현재는 팀장용만 처리하므로 패스)
     """
     print("=== 모듈 3: 협업 기여도 종합 분석 (스킵) ===")
     
-    new_state = state.copy()
-    new_state["messages"] = [HumanMessage(content="모듈 3: 협업 기여도 종합 분석 스킵")]
-    return new_state
+    return state
 
-def collaboration_formatter_submodule(state: Module3AgentState) -> Module3AgentState:
+def collaboration_formatter_submodule(state: Module3State) -> Module3State:
     """
     협업 매트릭스를 DB에 저장합니다.
     """
     print("=== 모듈 3: 협업 매트릭스 DB 저장 시작 ===")
     
-    team_collaboration_matrix = state["team_collaboration_matrix"]
-    team_evaluation_id = state["team_evaluation_id"]
+    team_collaboration_matrix = state.team_collaboration_matrix
+    team_evaluation_id = state.team_evaluation_id
     
     # DB에 저장
-    success = save_collaboration_matrix_to_db(team_evaluation_id, team_collaboration_matrix)
-    
-    if success:
-        print(f"협업 매트릭스 저장 성공: team_evaluation_id={team_evaluation_id}")
-        status_message = "모듈 3: 협업 매트릭스 DB 저장 완료"
+    if team_collaboration_matrix and team_evaluation_id:
+        success = save_collaboration_matrix_to_db(team_evaluation_id, team_collaboration_matrix)
+        status_message = "모듈 3: 협업 매트릭스 DB 저장 완료" if success else "모듈 3: 협업 매트릭스 DB 저장 실패"
     else:
-        print(f"협업 매트릭스 저장 실패: team_evaluation_id={team_evaluation_id}")
-        status_message = "모듈 3: 협업 매트릭스 DB 저장 실패"
+        status_message = "모듈 3: 협업 매트릭스 DB 저장 실패 - 데이터 누락"
     
-    new_state = state.copy()
-    new_state["messages"] = [HumanMessage(content=status_message)]
-    return new_state
+    # messages 필드 초기화 (LangGraph 호환성)
+    if state.messages is None:
+        state.messages = []
+    state.messages.append(HumanMessage(content=status_message))
+    
+    return state
 
 # ================================================================
 # 워크플로우 생성
@@ -341,7 +333,7 @@ def collaboration_formatter_submodule(state: Module3AgentState) -> Module3AgentS
 
 def create_module3_graph():
     """모듈 3 그래프 생성 및 반환"""
-    module3_workflow = StateGraph(Module3AgentState)
+    module3_workflow = StateGraph(Module3State)
     
     # 노드 추가 (State 키와 겹치지 않도록 이름 수정)
     module3_workflow.add_node("data_collection", collaboration_data_collection_submodule)
