@@ -259,7 +259,7 @@ def fetch_module7_score_data(emp_no: str, period_id: int, report_type: str) -> D
             query = text("""
                 SELECT raw_score, score, ai_reason
                 FROM temp_evaluations
-                WHERE TempEvaluation_empNo = :emp_no
+                WHERE emp_no = :emp_no
             """)
             
             result = connection.execute(query, {"emp_no": emp_no}).fetchone()

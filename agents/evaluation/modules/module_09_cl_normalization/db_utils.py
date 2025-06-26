@@ -44,7 +44,7 @@ def fetch_headquarter_members(headquarter_id: str, period_id: int) -> List[Dict]
             FROM employees e
             JOIN teams t ON e.team_id = t.team_id
             JOIN headquarters h ON t.headquarter_id = h.headquarter_id
-            JOIN temp_evaluations te ON e.emp_no = te.TempEvaluation_empNo
+            JOIN temp_evaluations te ON e.emp_no = te.emp_no
             JOIN team_evaluations tea ON t.team_id = tea.team_id
             JOIN final_evaluation_reports fer ON (e.emp_no = fer.emp_no AND tea.team_evaluation_id = fer.team_evaluation_id)
             WHERE h.headquarter_id = :headquarter_id 
@@ -155,7 +155,7 @@ def get_all_headquarters_with_data(period_id: int = 4) -> List[str]:
             FROM headquarters h
             JOIN teams t ON h.headquarter_id = t.headquarter_id
             JOIN employees e ON t.team_id = e.team_id
-            JOIN temp_evaluations te ON e.emp_no = te.TempEvaluation_empNo
+            JOIN temp_evaluations te ON e.emp_no = te.emp_no
             WHERE te.manager_score IS NOT NULL
             ORDER BY h.headquarter_id
         """)
@@ -170,7 +170,7 @@ def get_all_headquarters_info() -> List[Dict]:
             FROM headquarters h
             JOIN teams t ON h.headquarter_id = t.headquarter_id
             JOIN employees e ON t.team_id = e.team_id
-            JOIN temp_evaluations te ON e.emp_no = te.TempEvaluation_empNo
+            JOIN temp_evaluations te ON e.emp_no = te.emp_no
             WHERE te.manager_score IS NOT NULL
             ORDER BY h.headquarter_id
         """)

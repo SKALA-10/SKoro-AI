@@ -142,7 +142,7 @@ def batch_update_temp_evaluations(score_data: List[Dict]) -> Dict:
                             raw_score = :raw_score,
                             score = :score,
                             comment = :comment
-                        WHERE TempEvaluation_empNo = :emp_no
+                        WHERE emp_no = :emp_no
                     """)
                     
                     result = connection.execute(query, {
