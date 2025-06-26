@@ -28,6 +28,13 @@ def row_to_dict(row: Row) -> Dict[str, Any]:
         return {}
     return row._asdict()
 
+def get_year_from_period(period_id: int) -> int:
+    """period_id로 연도 조회"""
+    with engine.connect() as connection:
+        query = text("SELECT year FROM periods WHERE period_id = :period_id")
+        result = connection.execute(query, {"period_id": period_id}).scalar_one_or_none()
+        return result if result else 2024  # fallback
+
 # ================================================================
 # 데이터 조회 함수들
 # ================================================================
@@ -35,6 +42,9 @@ def row_to_dict(row: Row) -> Dict[str, Any]:
 def fetch_team_kpis_data(team_id: int, period_id: int) -> Optional[Dict]:
     """팀 KPI 데이터와 종합 달성률 조회"""
     with engine.connect() as connection:
+        # period_id로 연도 계산
+        year = get_year_from_period(period_id)
+        
         # team_evaluations.average_achievement_rate 조회
         overall_query = text("""
             SELECT te.average_achievement_rate as overall_rate
@@ -59,11 +69,11 @@ def fetch_team_kpis_data(team_id: int, period_id: int) -> Optional[Dict]:
                 tk.ai_kpi_progress_rate as rate,
                 tk.weight
             FROM team_kpis tk
-            WHERE tk.team_id = :team_id AND tk.year = 2024
+            WHERE tk.team_id = :team_id AND tk.year = :year
             ORDER BY tk.team_kpi_id
         """)
         
-        kpi_results = connection.execute(kpi_query, {"team_id": team_id}).fetchall()
+        kpi_results = connection.execute(kpi_query, {"team_id": team_id, "year": year}).fetchall()
         
         kpis = []
         for row in kpi_results:
@@ -81,10 +91,13 @@ def fetch_team_kpis_data(team_id: int, period_id: int) -> Optional[Dict]:
             "kpis": kpis
         }
 
-def fetch_multiple_teams_kpis(team_ids: List[int]) -> List[Dict]:
+def fetch_multiple_teams_kpis(team_ids: List[int], period_id: int) -> List[Dict]:
     """여러 팀의 KPI 데이터 배치 조회"""
     if not team_ids:
         return []
+    
+    # period_id로 연도 계산
+    year = get_year_from_period(period_id)
     
     with engine.connect() as connection:
         team_ids_str = ','.join(map(str, team_ids))
@@ -97,11 +110,11 @@ def fetch_multiple_teams_kpis(team_ids: List[int]) -> List[Dict]:
                 tk.ai_kpi_progress_rate as rate,
                 tk.weight
             FROM team_kpis tk
-            WHERE tk.team_id IN ({team_ids_str}) AND tk.year = 2024
+            WHERE tk.team_id IN ({team_ids_str}) AND tk.year = :year
             ORDER BY tk.team_id, tk.team_kpi_id
         """)
         
-        results = connection.execute(query).fetchall()
+        results = connection.execute(query, {"year": year}).fetchall()
         
         # 팀별로 그룹화
         teams_kpis = {}

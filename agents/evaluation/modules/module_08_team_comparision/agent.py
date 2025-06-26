@@ -153,7 +153,7 @@ def team_performance_collection_submodule(state: Module8AgentState) -> Module8Ag
         }
     
     # 유사팀들 KPI 데이터 수집
-    similar_teams_kpis = fetch_multiple_teams_kpis(similar_teams)
+    similar_teams_kpis = fetch_multiple_teams_kpis(similar_teams, period_id)
     
     logger.info(f"✅ 성과 데이터 수집 완료 - 우리팀 KPI {len(our_team_data['kpis'])}개, 유사팀 KPI {len(similar_teams_kpis)}개")
     
