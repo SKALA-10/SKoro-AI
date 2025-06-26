@@ -138,11 +138,19 @@ def fetch_team_tasks_and_kpis(team_id: int, period_id: int):
         """)
         task_ids = [row[0] for row in connection.execute(task_query, {"team_id": team_id})]
         
-        # 해당 팀의 KPI ID
+        # period_id로 연도 조회
+        year_query = text("SELECT year FROM periods WHERE period_id = :period_id")
+        year = connection.execute(year_query, {"period_id": period_id}).scalar_one_or_none()
+        
+        # 해당 팀의 해당 연도 KPI ID만 조회
         kpi_query = text("""
-            SELECT team_kpi_id FROM team_kpis WHERE team_id = :team_id
+            SELECT team_kpi_id FROM team_kpis 
+            WHERE team_id = :team_id AND year = :year
         """)
-        kpi_ids = [row[0] for row in connection.execute(kpi_query, {"team_id": team_id})]
+        kpi_ids = [row[0] for row in connection.execute(kpi_query, {
+            "team_id": team_id, 
+            "year": year
+        })]
         return task_ids, kpi_ids
 
 # ================================================================
