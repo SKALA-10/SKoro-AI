@@ -49,7 +49,7 @@ def calculate_weighted_average(values: List[float], weights: List[float], defaul
 def calculate_individual_weighted_achievement_rate(individual_tasks: List[Dict]) -> Dict[str, float]:
     """개인별 가중평균 달성률 계산"""
     if not individual_tasks:
-        return {"achievement_rate": 0, "contribution_rate": 0, "total_weight": 0}
+        return {"achievement_rate": 0, "total_weight": 0}
     
     # 달성률 가중평균 계산
     achievement_rates = []
@@ -65,15 +65,15 @@ def calculate_individual_weighted_achievement_rate(individual_tasks: List[Dict])
     # 가중평균 달성률
     weighted_achievement = calculate_weighted_average(achievement_rates, weights, 0)
     
-    # 기여도는 단순평균 (기존 방식 유지)
-    contribution_rates = [task.get('ai_contribution_score', 0) for task in individual_tasks]
-    avg_contribution = sum(contribution_rates) / len(contribution_rates) if contribution_rates else 0
+    # 기여도는 하이브리드 3단계에서 이미 계산되어 저장되므로 제거
+    # contribution_rates = [task.get('ai_contribution_score', 0) for task in individual_tasks]
+    # avg_contribution = sum(contribution_rates) / len(contribution_rates) if contribution_rates else 0
     
     total_weight = sum(weights)
     
     return {
         "achievement_rate": weighted_achievement,
-        "contribution_rate": avg_contribution,
+        # "contribution_rate": avg_contribution,  # 삭제 - 하이브리드 3단계에서 이미 계산됨
         "total_weight": total_weight
     }
 

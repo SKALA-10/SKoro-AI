@@ -530,7 +530,7 @@ def update_quarterly_specific_data(state: Module2State):
     # 1. 팀 내 개인별 달성률 기반 순위 계산 및 업데이트
     team_ranking_result = calculate_team_ranking(state)
     
-    # 2. 순위 결과를 feedback_reports에 저장
+    # 2. 순위 결과를 feedback_reports에 저장 (기여도는 이미 하이브리드 3단계에서 저장됨)
     update_team_ranking_to_feedback_reports(state, team_ranking_result)
     
     print(f"      ✅ 분기별 순위 업데이트 완료: {len(team_ranking_result)}명")
@@ -557,7 +557,7 @@ def calculate_team_ranking(state: Module2State) -> List[Dict]:
                 individual_tasks.append(task_data)
         
         if individual_tasks:
-            # 가중평균 달성률 계산
+            # 가중평균 달성률 계산 (기여도는 이미 하이브리드 3단계에서 계산되어 저장됨)
             result = calculate_individual_weighted_achievement_rate(individual_tasks)
             
             # 계산 과정 상세 로깅
@@ -579,7 +579,7 @@ def calculate_team_ranking(state: Module2State) -> List[Dict]:
                 'position': member.get('position', ''),
                 'cl': member.get('cl', ''),
                 'avg_achievement_rate': result['achievement_rate'],
-                'avg_contribution_rate': result['contribution_rate'],
+                # 'avg_contribution_rate': result['contribution_rate'],  # 삭제 - 하이브리드 3단계에서 이미 계산됨
                 'task_count': len(individual_tasks),
                 'total_weight': result['total_weight'],
                 'total_weighted_score': total_weighted_score
@@ -608,11 +608,11 @@ def update_team_ranking_to_feedback_reports(state: Module2State, team_ranking: L
     for i, member_data in enumerate(team_ranking):
         ranking = i + 1
         
-        # feedback_reports 업데이트 데이터
+        # feedback_reports 업데이트 데이터 - 기여도는 이미 올바르게 저장되어 있으므로 제외
         feedback_data = {
             'ranking': ranking,  # 팀 내 순위 (1, 2, 3, ...)
             'ai_achievement_rate': int(member_data['avg_achievement_rate']),  # 가중평균 달성률
-            'contribution_rate': int(member_data['avg_contribution_rate'])    # 평균 기여도
+            # 'contribution_rate': int(member_data['avg_contribution_rate'])  # 삭제 - 하이브리드 3단계 기여도가 이미 저장됨
         }
         
         # 기존 feedback_report 업데이트 또는 새로 생성
