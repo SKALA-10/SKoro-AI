@@ -8,6 +8,11 @@ from agents.evaluation.modules.module_03_peer_talk.agent import create_module3_g
 from agents.evaluation.modules.module_04_collaboration.agent import create_module4_graph
 from agents.evaluation.modules.module_06_4p_evaluation.agent import create_module6_graph_efficient
 from agents.evaluation.modules.module_02_goal_achievement.db_utils import fetch_team_tasks_and_kpis, fetch_team_members
+from agents.evaluation.modules.module_08_team_comparision.agent import create_module8_graph
+from agents.evaluation.modules.module_10_growth_coaching.agent import create_module10_graph
+from agents.evaluation.modules.module_11_team_coaching.agent import Module11TeamRiskManagementAgent
+from agents.evaluation.modules.module_11_team_coaching.db_utils import Module11DataAccess
+import asyncio
 
 logging.basicConfig(level=logging.INFO, format='[%(asctime)s] %(levelname)s: %(message)s')
 logging.getLogger("httpx").setLevel(logging.WARNING)
@@ -110,15 +115,92 @@ def run_phase2_all_teams(teams, period_id):
         logging.info(f"[Phase2] 팀 {team_id} 완료")
 
 # Phase 3: 전사 모듈8,10,11 (구조만)
-def run_phase3_global_modules(teams, period_id):
-    logging.info("Phase3: (예시) 전사 모듈8,10,11 실행 (구조만)")
-    # 실제 구현 필요시 모듈8,10,11 import 및 실행
+def run_phase3_all_modules(period_id: int):
+    """
+    Phase3: 전사 모듈8(팀 성과 비교), 10(개인 성장 코칭), 11(팀 리스크) 실행
+    """
+    logging.info("Phase3: 전사 모듈8,10,11 실행 시작")
+    teams = get_target_teams(period_id)
+    logging.info(f"[Phase3] 전체 대상 팀: {teams}")
+
+    # 1. 모듈8: 팀 성과 비교 (팀 단위)
+    for team_id in teams:
+        try:
+            logging.info(f"[Phase3][모듈8] 팀 {team_id} 실행 시작")
+            module8_graph = create_module8_graph()
+            state8 = {
+                "team_id": team_id,
+                "period_id": period_id,
+                "report_type": "quarterly",
+                "messages": []
+            }
+            module8_graph.invoke(state8)
+            logging.info(f"[Phase3][모듈8] 팀 {team_id} 완료")
+        except Exception as e:
+            logging.error(f"[Phase3][모듈8] 팀 {team_id} 실패: {e}")
+
+    # 2. 모듈10: 개인 성장 코칭 (팀원별)
+    for team_id in teams:
+        try:
+            members = fetch_team_members(team_id)
+            for member in members:
+                emp_no = member["emp_no"]
+                logging.info(f"[Phase3][모듈10] 팀 {team_id} - {emp_no} 실행 시작")
+                module10_graph = create_module10_graph()
+                state10 = {
+                    "emp_no": emp_no,
+                    "period_id": period_id,
+                    "report_type": "quarterly",
+                    "messages": [],
+                    "basic_info": {},
+                    "performance_data": {},
+                    "peer_talk_data": {},
+                    "fourp_data": {},
+                    "collaboration_data": {},
+                    "module7_score_data": {},
+                    "module9_final_data": {},
+                    "growth_analysis": {},
+                    "focus_coaching_needed": False,
+                    "focus_coaching_analysis": {},
+                    "individual_growth_result": {},
+                    "manager_coaching_result": {},
+                    "overall_comment": "",
+                    "storage_result": {},
+                    "processing_status": "",
+                    "error_messages": []
+                }
+                module10_graph.invoke(state10)
+                logging.info(f"[Phase3][모듈10] 팀 {team_id} - {emp_no} 완료")
+        except Exception as e:
+            logging.error(f"[Phase3][모듈10] 팀 {team_id} 실패: {e}")
+
+    # 3. 모듈11: 팀 리스크 (팀 단위, async)
+    async def run_module11_for_all_teams():
+        data_access = Module11DataAccess()
+        agent11 = Module11TeamRiskManagementAgent(data_access)
+        tasks = []
+        for team_id in teams:
+            try:
+                # team_evaluation_id 조회
+                from agents.evaluation.modules.module_02_goal_achievement.db_utils import fetch_team_evaluation_id
+                team_evaluation_id = fetch_team_evaluation_id(team_id, period_id)
+                if not team_evaluation_id:
+                    logging.error(f"[Phase3][모듈11] 팀 {team_id} team_evaluation_id 없음")
+                    continue
+                tasks.append(agent11.execute(team_id, period_id, team_evaluation_id))
+            except Exception as e:
+                logging.error(f"[Phase3][모듈11] 팀 {team_id} 실패: {e}")
+        await asyncio.gather(*tasks)
+        logging.info("[Phase3][모듈11] 전체 완료")
+
+    asyncio.run(run_module11_for_all_teams())
     logging.info("Phase3: 완료")
 
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--period-id', type=int, required=True)
     parser.add_argument('--teams', help='1,2,3 or all', required=True)
+    parser.add_argument('--phase3', action='store_true', help='Run Phase3')
     args = parser.parse_args()
 
     teams = get_target_teams(args.period_id, parse_teams(args.teams))
@@ -132,7 +214,8 @@ def main():
     if not check_all_teams_phase_completed(teams, args.period_id, "AI_PHASE2_COMPLETED"):
         logging.warning("일부 팀이 Phase2를 완료하지 못했습니다. 중단합니다.")
         return
-    run_phase3_global_modules(teams, args.period_id)
+    if args.phase3:
+        run_phase3_all_modules(args.period_id)
     logging.info("분기별 평가 워크플로우 전체 완료!")
 
 if __name__ == "__main__":
