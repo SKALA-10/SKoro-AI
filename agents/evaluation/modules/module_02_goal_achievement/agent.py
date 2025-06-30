@@ -3,8 +3,7 @@
 # ================================================================
 
 import logging
-from typing import Dict, List, Optional, Any, Literal
-from dataclasses import dataclass
+from typing import Dict, List, Optional, Any, Literal, TypedDict
 from langgraph.graph import StateGraph, START, END
 
 from db_utils import (
@@ -46,8 +45,7 @@ logger = logging.getLogger(__name__)
 # 상태 정의
 # ================================================================
 
-@dataclass
-class Module2State:
+class Module2State(TypedDict):
     """경량 State - 우리가 상의한 DB 기반 전달 방식"""
     # 기본 정보
     report_type: Literal["quarterly", "annual"]
@@ -59,14 +57,14 @@ class Module2State:
     target_team_kpi_ids: List[int]
     
     # 처리 결과 추적용 (DB ID만 저장)
-    updated_task_ids: Optional[List[int]] = None
-    updated_team_kpi_ids: Optional[List[int]] = None
-    feedback_report_ids: Optional[List[int]] = None
-    team_evaluation_id: Optional[int] = None
-    final_evaluation_report_ids: Optional[List[int]] = None
+    updated_task_ids: Optional[List[int]]
+    updated_team_kpi_ids: Optional[List[int]]
+    feedback_report_ids: Optional[List[int]]
+    team_evaluation_id: Optional[int]
+    final_evaluation_report_ids: Optional[List[int]]
     
     # 특별 전달 데이터 (서브모듈 간 필요시만)
-    team_context_guide: Optional[Dict] = None
+    team_context_guide: Optional[Dict]
 
 # ================================================================
 # 에러 처리 클래스
@@ -84,14 +82,14 @@ def data_collection_submodule(state: Module2State) -> Module2State:
     print(f"   📋 데이터 수집 중...")
     
     # team_evaluation_id 확인/생성
-    team_evaluation_id = fetch_team_evaluation_id(state.team_id, state.period_id)
+    team_evaluation_id = fetch_team_evaluation_id(state['team_id'], state['period_id'])
     if not team_evaluation_id:
-        raise DataIntegrityError(f"team_evaluation_id not found for team {state.team_id}, period {state.period_id}")
+        raise DataIntegrityError(f"team_evaluation_id not found for team {state['team_id']}, period {state['period_id']}")
     
-    state.team_evaluation_id = team_evaluation_id
+    state['team_evaluation_id'] = team_evaluation_id
     
     # evaluation_type 확인/설정
-    for kpi_id in state.target_team_kpi_ids:
+    for kpi_id in state['target_team_kpi_ids']:
         evaluation_type = check_evaluation_type(kpi_id)
         print(f"      • KPI {kpi_id}: {evaluation_type} 평가")
     
@@ -106,8 +104,8 @@ def achievement_and_grade_calculation_submodule(state: Module2State) -> Module2S
     batch_data = []
     
     # 배치용 데이터 준비
-    for task_id in state.target_task_ids:
-        task_data = fetch_cumulative_task_data(task_id, state.period_id)
+    for task_id in state['target_task_ids']:
+        task_data = fetch_cumulative_task_data(task_id, state['period_id'])
         if not task_data:
             continue
             
@@ -124,7 +122,7 @@ def achievement_and_grade_calculation_submodule(state: Module2State) -> Module2S
     batch_size = 15
     for i in range(0, len(batch_data), batch_size):
         batch = batch_data[i:i+batch_size]
-        results = batch_calculate_achievement_and_grades(batch, state.report_type == "annual")
+        results = batch_calculate_achievement_and_grades(batch, state['report_type'] == "annual")
         
         # 결과 저장
         for task_data, result in zip(batch, results):
@@ -137,13 +135,13 @@ def achievement_and_grade_calculation_submodule(state: Module2State) -> Module2S
             }
             
             # 연말인 경우 등급도 저장
-            if state.report_type == "annual" and result.get('grade'):
+            if state['report_type'] == "annual" and result.get('grade'):
                 update_data["ai_assessed_grade"] = result['grade']
             
             if update_task_summary(task_summary_id, update_data):
                 updated_task_ids.append(task_data['task_id'])
     
-    state.updated_task_ids = updated_task_ids
+    state['updated_task_ids'] = updated_task_ids
     print(f"   ✅ 달성률 계산 완료: {len(updated_task_ids)}개 Task 업데이트")
     return state
 
@@ -155,19 +153,19 @@ def contribution_calculation_submodule(state: Module2State) -> Module2State:
     kpi_contributions_by_emp = {}  # {emp_no: total_score} - 하이브리드 3단계 결과
     
     # KPI별로 처리
-    for kpi_id in state.target_team_kpi_ids:
+    for kpi_id in state['target_team_kpi_ids']:
         evaluation_type = check_evaluation_type(kpi_id)
         kpi_data = fetch_team_kpi_data(kpi_id)
         
         if evaluation_type == "quantitative":
             # 정량 평가: 개인성과/팀전체성과 × 100
-            contributions = calculate_quantitative_contributions(kpi_id, state.period_id)
+            contributions = calculate_quantitative_contributions(kpi_id, state['period_id'])
         else:
             # 정성 평가: LLM 기반 상대 평가
-            contributions = calculate_qualitative_contributions(kpi_id, state.period_id, kpi_data)
+            contributions = calculate_qualitative_contributions(kpi_id, state['period_id'], kpi_data)
         
         # 하이브리드 1단계: 참여자 수 보정
-        kpi_tasks = fetch_kpi_tasks(kpi_id, state.period_id)
+        kpi_tasks = fetch_kpi_tasks(kpi_id, state['period_id'])
         participants_count = len(set(task['emp_no'] for task in kpi_tasks))
         
         print(f"      • KPI {kpi_id}: {evaluation_type} 평가, 참여자 {participants_count}명")
@@ -188,7 +186,7 @@ def contribution_calculation_submodule(state: Module2State) -> Module2State:
         
         # Task별 기여도 업데이트 (원래 KPI별 기여도 저장)
         for task in kpi_tasks:
-            task_data = fetch_cumulative_task_data(task['task_id'], state.period_id)
+            task_data = fetch_cumulative_task_data(task['task_id'], state['period_id'])
             if not task_data:
                 continue
                 
@@ -224,13 +222,13 @@ def contribution_calculation_submodule(state: Module2State) -> Module2State:
     # 디버깅: 하이브리드 계산 과정 시각화
     debug_contribution_calculation(state)
     
-    state.updated_task_ids = list(set((state.updated_task_ids or []) + updated_task_ids))
+    state['updated_task_ids'] = list(set((state['updated_task_ids'] or []) + updated_task_ids))
     print(f"   ✅ 기여도 계산 완료: {len(updated_task_ids)}개 Task 업데이트, {len(final_contributions)}명 최종 기여도 저장")
     return state
 
 def save_final_contributions_to_db(state: Module2State, final_contributions: Dict[str, float]):
     """최종 기여도를 DB에 저장"""
-    team_members = fetch_team_members(state.team_id)
+    team_members = fetch_team_members(state['team_id'])
     
     for member in team_members:
         if member.get('role') == 'MANAGER':
@@ -239,18 +237,18 @@ def save_final_contributions_to_db(state: Module2State, final_contributions: Dic
         emp_no = member['emp_no']
         final_contribution = final_contributions.get(emp_no, 0)
         
-        if state.report_type == "quarterly":
+        if state['report_type'] == "quarterly":
             # 분기별: feedback_reports에 저장
             save_feedback_report(
                 emp_no, 
-                state.team_evaluation_id or 0,
+                state['team_evaluation_id'] or 0,
                 {"contribution_rate": int(final_contribution)}  # 기존 컬럼명 사용
             )
         else:
             # 연말: final_evaluation_reports에 저장
             save_final_evaluation_report(
                 emp_no,
-                state.team_evaluation_id or 0,
+                state['team_evaluation_id'] or 0,
                 {"contribution_rate": int(final_contribution)}  # 기존 컬럼명 사용
             )
 
@@ -261,16 +259,16 @@ def debug_contribution_calculation(state: Module2State):
     
     # 1단계: KPI별 원래 기여도 수집
     kpi_contributions = {}
-    for kpi_id in state.target_team_kpi_ids:
+    for kpi_id in state['target_team_kpi_ids']:
         evaluation_type = check_evaluation_type(kpi_id)
         kpi_data = fetch_team_kpi_data(kpi_id)
-        kpi_tasks = fetch_kpi_tasks(kpi_id, state.period_id)
+        kpi_tasks = fetch_kpi_tasks(kpi_id, state['period_id'])
         participants_count = len(set(task['emp_no'] for task in kpi_tasks))
         
         if evaluation_type == "quantitative":
-            contributions = calculate_quantitative_contributions(kpi_id, state.period_id)
+            contributions = calculate_quantitative_contributions(kpi_id, state['period_id'])
         else:
-            contributions = calculate_qualitative_contributions(kpi_id, state.period_id, kpi_data)
+            contributions = calculate_qualitative_contributions(kpi_id, state['period_id'], kpi_data)
         
         kpi_contributions[kpi_id] = {
             'kpi_name': kpi_data.get('kpi_name', f'KPI{kpi_id}'),
@@ -330,13 +328,13 @@ def team_analysis_submodule(state: Module2State) -> Module2State:
     kpi_rates = []
     
     # 정량 평가 KPI들 처리 (LLM으로 팀 KPI 달성률 계산)
-    for kpi_id in state.target_team_kpi_ids:
+    for kpi_id in state['target_team_kpi_ids']:
         evaluation_type = check_evaluation_type(kpi_id)
         
         if evaluation_type == "quantitative":
             # 정량 KPI도 LLM이 종합 판단
             kpi_data = fetch_team_kpi_data(kpi_id)
-            kpi_rate = calculate_team_kpi_achievement_rate(kpi_id, state.period_id, kpi_data)
+            kpi_rate = calculate_team_kpi_achievement_rate(kpi_id, state['period_id'], kpi_data)
             
             update_data = {
                 "ai_kpi_progress_rate": int(kpi_rate['rate']),
@@ -353,7 +351,7 @@ def team_analysis_submodule(state: Module2State) -> Module2State:
                 kpi_rates.append(kpi_data['ai_kpi_progress_rate'])
     
     # 팀 전체 평균 달성률 계산 (KPI 비중 고려)
-    team_average_rate = calculate_team_average_achievement_rate(state.target_team_kpi_ids)
+    team_average_rate = calculate_team_average_achievement_rate(state['target_team_kpi_ids'])
     
     # team_evaluations 업데이트
     team_eval_data = {
@@ -361,15 +359,15 @@ def team_analysis_submodule(state: Module2State) -> Module2State:
     }
     
     # 연말인 경우 전년 대비 성장률 계산 시도
-    if state.report_type == "annual":
-        yoy_growth = calculate_year_over_year_growth(state.team_id, state.period_id, team_average_rate)
+    if state['report_type'] == "annual":
+        yoy_growth = calculate_year_over_year_growth(state['team_id'], state['period_id'], team_average_rate)
         if yoy_growth is not None:
             team_eval_data["year_over_year_growth"] = int(yoy_growth)
     
-    if update_team_evaluations(state.team_evaluation_id or 0, team_eval_data):
+    if update_team_evaluations(state['team_evaluation_id'] or 0, team_eval_data):
         print(f"      • 팀 평균 달성률: {team_average_rate:.1f}%")
     
-    state.updated_team_kpi_ids = updated_kpi_ids
+    state['updated_team_kpi_ids'] = updated_kpi_ids
     print(f"   ✅ 팀 분석 완료: {len(updated_kpi_ids)}개 KPI 업데이트")
     return state
 
@@ -378,8 +376,8 @@ def comment_generation_submodule(state: Module2State) -> Module2State:
     print(f"   📝 코멘트 생성 중...")
     
     # 팀 일관성 가이드 생성
-    team_context_guide = generate_team_consistency_guide(state.team_id, state.period_id)
-    state.team_context_guide = team_context_guide
+    team_context_guide = generate_team_consistency_guide(state['team_id'], state['period_id'])
+    state['team_context_guide'] = team_context_guide
     
     # 통합 코멘트 생성기 사용
     generate_task_comments_unified(state)
@@ -391,15 +389,15 @@ def comment_generation_submodule(state: Module2State) -> Module2State:
 
 def generate_task_comments_unified(state: Module2State):
     """Task별 코멘트 생성 (통합 시스템)"""
-    period_type = "annual" if state.report_type == "annual" else "quarterly"
+    period_type = "annual" if state['report_type'] == "annual" else "quarterly"
     
-    for task_id in state.target_task_ids:
-        task_data = fetch_cumulative_task_data(task_id, state.period_id)
+    for task_id in state['target_task_ids']:
+        task_data = fetch_cumulative_task_data(task_id, state['period_id'])
         if not task_data:
             continue
         
         # 통합 코멘트 생성기 사용
-        generator = CommentGenerator("task", period_type, state.team_context_guide)
+        generator = CommentGenerator("task", period_type, state['team_context_guide'])
         comment = generator.generate(task_data)
         
         if task_data.get('task_summary_id'):
@@ -409,8 +407,8 @@ def generate_task_comments_unified(state: Module2State):
 
 def generate_individual_summary_comments_unified(state: Module2State):
     """개인 종합 코멘트 생성 (통합 시스템)"""
-    team_members = fetch_team_members(state.team_id)
-    period_type = "annual" if state.report_type == "annual" else "quarterly"
+    team_members = fetch_team_members(state['team_id'])
+    period_type = "annual" if state['report_type'] == "annual" else "quarterly"
     
     for member in team_members:
         if member.get('role') == 'MANAGER':
@@ -418,8 +416,8 @@ def generate_individual_summary_comments_unified(state: Module2State):
         
         # 개인 Task 데이터 수집
         individual_tasks = []
-        for task_id in state.target_task_ids:
-            task_data = fetch_cumulative_task_data(task_id, state.period_id)
+        for task_id in state['target_task_ids']:
+            task_data = fetch_cumulative_task_data(task_id, state['period_id'])
             if task_data and task_data.get('emp_no') == member['emp_no']:
                 individual_tasks.append(task_data)
         
@@ -427,53 +425,53 @@ def generate_individual_summary_comments_unified(state: Module2State):
             continue
         
         # 통합 코멘트 생성기 사용
-        generator = CommentGenerator("individual", period_type, state.team_context_guide)
+        generator = CommentGenerator("individual", period_type, state['team_context_guide'])
         comment = generator.generate({
             **member,
             "tasks": individual_tasks
         })
         
         # 분기별/연말별 저장
-        if state.report_type == "quarterly":
+        if state['report_type'] == "quarterly":
             feedback_report_id = save_feedback_report(
                 member['emp_no'], 
-                state.team_evaluation_id or 0,
+                state['team_evaluation_id'] or 0,
                 {"ai_overall_contribution_summary_comment": comment}
             )
-            if state.feedback_report_ids is None:
-                state.feedback_report_ids = []
-            state.feedback_report_ids.append(feedback_report_id)
+            if state['feedback_report_ids'] is None:
+                state['feedback_report_ids'] = []
+            state['feedback_report_ids'].append(feedback_report_id)
         else:  # annual
             final_report_id = save_final_evaluation_report(
                 member['emp_no'],
-                state.team_evaluation_id or 0, 
+                state['team_evaluation_id'] or 0, 
                 {"ai_annual_performance_summary_comment": comment}
             )
-            if state.final_evaluation_report_ids is None:
-                state.final_evaluation_report_ids = []
-            state.final_evaluation_report_ids.append(final_report_id)
+            if state['final_evaluation_report_ids'] is None:
+                state['final_evaluation_report_ids'] = []
+            state['final_evaluation_report_ids'].append(final_report_id)
 
 def generate_team_overall_comment_unified(state: Module2State):
     """팀 전체 분석 코멘트 생성 (통합 시스템)"""
     # 팀 KPI 데이터 수집
     team_kpis_data = []
-    for kpi_id in state.target_team_kpi_ids:
+    for kpi_id in state['target_team_kpi_ids']:
         kpi_data = fetch_team_kpi_data(kpi_id)
         if kpi_data:
             team_kpis_data.append(kpi_data)
     
-    period_type = "annual" if state.report_type == "annual" else "quarterly"
+    period_type = "annual" if state['report_type'] == "annual" else "quarterly"
     
     # 통합 코멘트 생성기 사용
-    generator = CommentGenerator("team", period_type, state.team_context_guide)
+    generator = CommentGenerator("team", period_type, state['team_context_guide'])
     comment = generator.generate({
         "kpis": team_kpis_data,
-        "team_context": state.team_context_guide.get('team_context', '') if state.team_context_guide else '',
-        "performance_level": state.team_context_guide.get('performance_level', '') if state.team_context_guide else ''
+        "team_context": state['team_context_guide'].get('team_context', '') if state['team_context_guide'] else '',
+        "performance_level": state['team_context_guide'].get('performance_level', '') if state['team_context_guide'] else ''
     })
     
     # team_evaluations 업데이트
-    update_team_evaluations(state.team_evaluation_id or 0, {
+    update_team_evaluations(state['team_evaluation_id'] or 0, {
         "ai_team_overall_analysis_comment": comment
     })
 
@@ -487,11 +485,11 @@ def db_update_submodule(state: Module2State) -> Module2State:
             # 이미 각 서브모듈에서 업데이트했으므로 최종 검증만 수행
             
             # 1. 분기별 추가 업데이트 (ranking, cumulative 데이터)
-            if state.report_type == "quarterly":
+            if state['report_type'] == "quarterly":
                 update_quarterly_specific_data(state)
             
             # 2. 연말 추가 업데이트 (final_evaluation_reports 추가 필드)
-            elif state.report_type == "annual":
+            elif state['report_type'] == "annual":
                 update_annual_specific_data(state)
             
             # 3. 업데이트 결과 검증
@@ -501,10 +499,10 @@ def db_update_submodule(state: Module2State) -> Module2State:
                 raise DataIntegrityError(f"Final validation failed: {validation_result['errors']}")
             
             # 4. 업데이트 통계 로깅
-            updated_tasks = len(state.updated_task_ids or [])
-            updated_kpis = len(state.updated_team_kpi_ids or [])
-            updated_feedback_reports = len(state.feedback_report_ids or [])
-            updated_final_reports = len(state.final_evaluation_report_ids or [])
+            updated_tasks = len(state['updated_task_ids'] or [])
+            updated_kpis = len(state['updated_team_kpi_ids'] or [])
+            updated_feedback_reports = len(state['feedback_report_ids'] or [])
+            updated_final_reports = len(state['final_evaluation_report_ids'] or [])
             
             print(f"      • Task 업데이트: {updated_tasks}개")
             print(f"      • KPI 업데이트: {updated_kpis}개")
@@ -512,7 +510,7 @@ def db_update_submodule(state: Module2State) -> Module2State:
             print(f"      • 최종 리포트: {updated_final_reports}개")
             
             # 5. 최종 상태 로깅
-            if state.report_type == "quarterly":
+            if state['report_type'] == "quarterly":
                 print(f"      • 분기 평가 완료")
             else:
                 print(f"      • 연말 평가 완료")
@@ -542,7 +540,7 @@ def calculate_team_ranking(state: Module2State) -> List[Dict]:
     """팀 내 개인별 달성률 기반 순위 계산"""
     print(f"        🏆 팀 내 순위 계산 중...")
     
-    team_members = fetch_team_members(state.team_id)
+    team_members = fetch_team_members(state['team_id'])
     member_achievements = []
     
     for member in team_members:
@@ -551,8 +549,8 @@ def calculate_team_ranking(state: Module2State) -> List[Dict]:
             
         # 개인별 Task 수집
         individual_tasks = []
-        for task_id in state.target_task_ids:
-            task_data = fetch_cumulative_task_data(task_id, state.period_id)
+        for task_id in state['target_task_ids']:
+            task_data = fetch_cumulative_task_data(task_id, state['period_id'])
             if task_data and task_data.get('emp_no') == member['emp_no']:
                 individual_tasks.append(task_data)
         
@@ -618,7 +616,7 @@ def update_team_ranking_to_feedback_reports(state: Module2State, team_ranking: L
         # 기존 feedback_report 업데이트 또는 새로 생성
         feedback_report_id = save_feedback_report(
             member_data['emp_no'],
-            state.team_evaluation_id or 0,
+            state['team_evaluation_id'] or 0,
             feedback_data
         )
         
@@ -633,7 +631,7 @@ def update_annual_specific_data(state: Module2State):
     """연말 전용 데이터 업데이트 - Task Weight 기반 가중평균"""
     print(f"      📊 연말 전용 데이터 업데이트 중...")
     
-    team_members = fetch_team_members(state.team_id)
+    team_members = fetch_team_members(state['team_id'])
     
     for member in team_members:
         if member.get('role') == 'MANAGER':
@@ -641,8 +639,8 @@ def update_annual_specific_data(state: Module2State):
             
         # 개인별 Task 수집
         individual_tasks = []
-        for task_id in state.target_task_ids:
-            task_data = fetch_cumulative_task_data(task_id, state.period_id)
+        for task_id in state['target_task_ids']:
+            task_data = fetch_cumulative_task_data(task_id, state['period_id'])
             if task_data and task_data.get('emp_no') == member['emp_no']:
                 individual_tasks.append(task_data)
         
@@ -666,7 +664,7 @@ def update_annual_specific_data(state: Module2State):
             
             save_final_evaluation_report(
                 member['emp_no'],
-                state.team_evaluation_id or 0,
+                state['team_evaluation_id'] or 0,
                 final_data
             )
     
@@ -679,8 +677,8 @@ def validate_final_update_results(state: Module2State) -> Dict[str, Any]:
     
     try:
         # 1. Task 업데이트 검증
-        for task_id in (state.updated_task_ids or []):
-            task_data = fetch_cumulative_task_data(task_id, state.period_id)
+        for task_id in (state['updated_task_ids'] or []):
+            task_data = fetch_cumulative_task_data(task_id, state['period_id'])
             
             # 필수 필드 검증
             if task_data.get('ai_achievement_rate') is None:
@@ -693,11 +691,11 @@ def validate_final_update_results(state: Module2State) -> Dict[str, Any]:
                 warnings.append(f"Task {task_id}: ai_analysis_comment_task empty")
             
             # 연말 전용 검증
-            if state.report_type == "annual" and not task_data.get('ai_assessed_grade'):
+            if state['report_type'] == "annual" and not task_data.get('ai_assessed_grade'):
                 warnings.append(f"Task {task_id}: ai_assessed_grade not set for annual evaluation")
         
         # 2. Team KPI 업데이트 검증
-        for kpi_id in (state.updated_team_kpi_ids or []):
+        for kpi_id in (state['updated_team_kpi_ids'] or []):
             kpi_data = fetch_team_kpi_data(kpi_id)
             
             if kpi_data.get('ai_kpi_progress_rate') is None:
@@ -707,7 +705,7 @@ def validate_final_update_results(state: Module2State) -> Dict[str, Any]:
                 warnings.append(f"KPI {kpi_id}: ai_kpi_analysis_comment empty")
         
         # 3. Team evaluation 검증
-        if state.team_evaluation_id:
+        if state['team_evaluation_id']:
             from db_utils import engine
             with engine.connect() as connection:
                 query_text = """
@@ -718,7 +716,7 @@ def validate_final_update_results(state: Module2State) -> Dict[str, Any]:
                 """
                 from sqlalchemy import text
                 query = text(query_text)
-                result = connection.execute(query, {"team_evaluation_id": state.team_evaluation_id})
+                result = connection.execute(query, {"team_evaluation_id": state['team_evaluation_id']})
                 row = result.fetchone()
                 from db_utils import row_to_dict
                 team_eval = row_to_dict(row) if row else {}
@@ -730,7 +728,7 @@ def validate_final_update_results(state: Module2State) -> Dict[str, Any]:
                     warnings.append("Team evaluation: ai_team_overall_analysis_comment empty")
         
         # 4. 분기별 팀 순위 검증 (새로 추가)
-        if state.report_type == "quarterly":
+        if state['report_type'] == "quarterly":
             ranking_validation = validate_team_ranking_data(state)
             if not ranking_validation['success']:
                 errors.extend(ranking_validation['errors'])
@@ -741,13 +739,13 @@ def validate_final_update_results(state: Module2State) -> Dict[str, Any]:
             print(f"        • 팀원 수: {ranking_validation['team_member_count']}명")
         
         # 5. 레포트 검증
-        if state.report_type == "quarterly" and state.feedback_report_ids:
-            for report_id in state.feedback_report_ids:
+        if state['report_type'] == "quarterly" and state['feedback_report_ids']:
+            for report_id in state['feedback_report_ids']:
                 # feedback_reports 검증 로직
                 pass
         
-        elif state.report_type == "annual" and state.final_evaluation_report_ids:
-            for report_id in state.final_evaluation_report_ids:
+        elif state['report_type'] == "annual" and state['final_evaluation_report_ids']:
+            for report_id in state['final_evaluation_report_ids']:
                 # final_evaluation_reports 검증 로직
                 pass
         
@@ -765,10 +763,10 @@ def validate_final_update_results(state: Module2State) -> Dict[str, Any]:
             'errors': errors,
             'warnings': warnings,
             'stats': {
-                'tasks_validated': len(state.updated_task_ids or []),
-                'kpis_validated': len(state.updated_team_kpi_ids or []),
-                'reports_validated': len(state.feedback_report_ids or []) + len(state.final_evaluation_report_ids or []),
-                'ranking_validated': state.report_type == "quarterly"
+                'tasks_validated': len(state['updated_task_ids'] or []),
+                'kpis_validated': len(state['updated_team_kpi_ids'] or []),
+                'reports_validated': len(state['feedback_report_ids'] or []) + len(state['final_evaluation_report_ids'] or []),
+                'ranking_validated': state['report_type'] == "quarterly"
             }
         }
         
@@ -799,7 +797,7 @@ def validate_team_ranking_data(state: Module2State) -> Dict[str, Any]:
                 WHERE team_evaluation_id = :team_evaluation_id
                 ORDER BY ranking
             """)
-            results = connection.execute(query, {"team_evaluation_id": state.team_evaluation_id})
+            results = connection.execute(query, {"team_evaluation_id": state['team_evaluation_id']})
             from db_utils import row_to_dict
             ranking_data = [row_to_dict(row) for row in results]
             
@@ -833,7 +831,7 @@ def validate_team_ranking_data(state: Module2State) -> Dict[str, Any]:
                     errors.append(f"순위 {i+1}위({ranking_data[i]['emp_no']})의 달성률 {current_rate}%가 {i+2}위({ranking_data[i+1]['emp_no']})의 달성률 {next_rate}%보다 낮음")
             
             # 4. 팀원 수와 순위 수 일치 검증
-            team_members = fetch_team_members(state.team_id)
+            team_members = fetch_team_members(state['team_id'])
             non_manager_count = len([m for m in team_members if m.get('role') != 'MANAGER'])
             
             if len(ranking_data) != non_manager_count:
@@ -868,12 +866,12 @@ def validate_data_consistency(state: Module2State) -> List[str]:
     
     try:
         # 1. 기여도 합계 검증 (KPI별)
-        for kpi_id in state.target_team_kpi_ids:
-            kpi_tasks = fetch_kpi_tasks(kpi_id, state.period_id)
+        for kpi_id in state['target_team_kpi_ids']:
+            kpi_tasks = fetch_kpi_tasks(kpi_id, state['period_id'])
             total_contribution = 0
             
             for task in kpi_tasks:
-                task_data = fetch_cumulative_task_data(task['task_id'], state.period_id)
+                task_data = fetch_cumulative_task_data(task['task_id'], state['period_id'])
                 contribution = task_data.get('ai_contribution_score', 0)
                 total_contribution += contribution
             
@@ -883,15 +881,15 @@ def validate_data_consistency(state: Module2State) -> List[str]:
                 errors.append(f"KPI {kpi_id}: contribution sum {total_contribution} far from 100")
         
         # 2. 달성률 범위 검증
-        for task_id in state.updated_task_ids or []:
-            task_data = fetch_cumulative_task_data(task_id, state.period_id)
+        for task_id in state['updated_task_ids'] or []:
+            task_data = fetch_cumulative_task_data(task_id, state['period_id'])
             achievement_rate = task_data.get('ai_achievement_rate', 0)
             
             if not (0 <= achievement_rate <= 200):
                 errors.append(f"Task {task_id}: achievement_rate {achievement_rate} out of range")
         
         # 3. 팀 평균 달성률과 개별 달성률 일관성 검증
-        if state.team_evaluation_id:
+        if state['team_evaluation_id']:
             from db_utils import engine
             from sqlalchemy import text
             with engine.connect() as connection:
@@ -900,11 +898,11 @@ def validate_data_consistency(state: Module2State) -> List[str]:
                     FROM team_evaluations 
                     WHERE team_evaluation_id = :team_evaluation_id
                 """)
-                result = connection.execute(query, {"team_evaluation_id": state.team_evaluation_id})
+                result = connection.execute(query, {"team_evaluation_id": state['team_evaluation_id']})
                 team_avg = result.scalar_one_or_none()
                 
                 # 개별 Task들의 가중평균과 팀 평균이 크게 다르지 않은지 확인
-                calculated_avg = calculate_team_average_achievement_rate(state.target_team_kpi_ids)
+                calculated_avg = calculate_team_average_achievement_rate(state['target_team_kpi_ids'])
                 
                 if team_avg and abs(team_avg - calculated_avg) > 15:
                     errors.append(f"Team average inconsistency: stored {team_avg} vs calculated {calculated_avg}")
@@ -920,7 +918,7 @@ def validate_data_consistency(state: Module2State) -> List[str]:
 
 def create_module2_graph():
     """모듈 2 그래프 생성 및 반환"""
-    # StateGraph에 사용할 타입: dataclass 그대로 사용 (dict도 가능)
+    # StateGraph에 사용할 타입: TypedDict 사용 (LangGraph 권장)
     module2_workflow = StateGraph(Module2State)
 
     # 각 서브모듈을 노드로 등록

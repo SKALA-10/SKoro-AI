@@ -50,55 +50,35 @@ async def run_module_11(team_id: int, period_id: int, team_evaluation_id: int) -
 # 전체 통합 테스트
 # ====================================
 
-async def test_improved_module11():
-    """개선된 Module 11 전체 실행 테스트"""
-    
+async def test_improved_module11(team_id, period_id, team_evaluation_id):
+    """개선된 Module 11 전체 실행 테스트 (파라미터 직접 전달)"""
     print("🚀 개선된 Module 11 테스트 시작")
     print("=" * 80)
     print(f"📋 테스트 파라미터:")
-    print(f"   팀 ID: {TEST_TEAM_ID} (AI핵심기술팀)")
-    print(f"   기간 ID: {TEST_PERIOD_ID} (2025년 4분기 - 연말)")
-    print(f"   평가 ID: {TEST_TEAM_EVALUATION_ID}")
+    print(f"   팀 ID: {team_id}")
+    print(f"   기간 ID: {period_id}")
+    print(f"   평가 ID: {team_evaluation_id}")
     print("=" * 80)
-    
     try:
-        # 실행 전 DB 상태 확인
         print("\n🔍 실행 전 DB 상태 확인...")
-        before_data = check_db_before_test(TEST_TEAM_EVALUATION_ID)
-        
-        # 개선된 Module 11 실행
+        before_data = check_db_before_test(team_evaluation_id)
         print("\n⚡ 개선된 Module 11 실행 중...")
         start_time = datetime.now()
-        
-        result = await run_module_11(TEST_TEAM_ID, TEST_PERIOD_ID, TEST_TEAM_EVALUATION_ID)
-        
+        result = await run_module_11(team_id, period_id, team_evaluation_id)
         end_time = datetime.now()
         execution_time = (end_time - start_time).total_seconds()
-        
         print(f"✅ 실행 완료! (소요시간: {execution_time:.1f}초)")
-        
-        # 실행 후 DB 상태 확인
         print("\n🔍 실행 후 DB 상태 확인...")
-        after_data = check_db_after_test(TEST_TEAM_EVALUATION_ID)
-        
-        # 결과 분석
+        after_data = check_db_after_test(team_evaluation_id)
         print("\n📊 결과 분석...")
         analyze_test_results(result, before_data, after_data, execution_time)
-        
-        # JSON 구조 검증
         print("\n🔬 JSON 구조 검증...")
         validate_json_structures(after_data)
-        
-        # 내용 품질 검증
         print("\n📝 내용 품질 검증...")
         validate_content_quality(after_data)
-        
-        # 최종 결과 요약
         print("\n📋 최종 테스트 결과 요약...")
         summarize_test_results(result, before_data, after_data)
-        
         return result
-        
     except Exception as e:
         print(f"❌ 테스트 실패: {str(e)}")
         import traceback
@@ -122,26 +102,25 @@ async def test_individual_components():
         # Agent 초기화
         agent = Module11TeamRiskManagementAgent(data_access)
         
-        # 테스트용 State 생성
-        from dataclasses import dataclass
-        
-        @dataclass
-        class TestState:
-            team_id: int = TEST_TEAM_ID
-            period_id: int = TEST_PERIOD_ID
-            team_evaluation_id: int = TEST_TEAM_EVALUATION_ID
-            is_final: bool = True
-            key_risks: Optional[List] = None
-            collaboration_bias_level: Optional[str] = None
-            ai_risk_result: Optional[Dict[str, Any]] = None
+        # 실제 데이터로 team_evaluation_id 찾기
+        found_team_evaluation_id, found_period_id = find_team_evaluation_id_for_team_1()
+        if not found_team_evaluation_id or not found_period_id:
+            print("❌ 테스트용 데이터를 찾을 수 없습니다.")
+            return None
         
         # 실제 Module11AgentState 사용
         from agent import Module11AgentState
         state = Module11AgentState(
-            team_id=TEST_TEAM_ID,
-            period_id=TEST_PERIOD_ID,
-            team_evaluation_id=TEST_TEAM_EVALUATION_ID,
-            is_final=True
+            team_id=1,
+            period_id=found_period_id,
+            team_evaluation_id=found_team_evaluation_id,
+            is_final=True,
+            key_risks=None,
+            collaboration_bias_level=None,
+            performance_trend=None,
+            ai_risk_result=None,
+            ai_plan_result=None,
+            overall_comment_result=None
         )
         
         # 실제 데이터 수집
@@ -458,58 +437,88 @@ def summarize_test_results(result: Any, before_data: Dict, after_data: Dict):
 # 전체 테스트 실행
 # ====================================
 
-async def run_all_tests():
-    """모든 테스트 실행"""
-    
+async def run_all_tests(team_id, period_id, team_evaluation_id):
+    """모든 테스트 실행 (파라미터 직접 전달)"""
     print("🚀 Module 11 개선 버전 종합 테스트")
     print("=" * 80)
-    
     # 1. 전체 통합 테스트
     print("\n1️⃣ 전체 통합 테스트")
-    integration_result = await test_improved_module11()
-    
+    integration_result = await test_improved_module11(team_id, period_id, team_evaluation_id)
     # 2. 개별 구성요소 테스트
     print("\n2️⃣ 개별 구성요소 테스트")
     component_results = await test_individual_components()
-    
     # 3. 성능 비교 테스트 (옵션)
     print("\n3️⃣ 성능 비교 테스트 (기존 vs 개선)")
     # 여러 번 실행하여 평균 성능 측정 가능
-    
     print("\n🎉 모든 테스트 완료!")
-    
     return {
         'integration': integration_result,
         'components': component_results
     }
 
 # ====================================
-# 실행 테스트 파라미터 (실제 DB 데이터 기준으로 수정)
+# 실행 테스트 파라미터 (team_id=1로 수정)
 # ====================================
 
-# 실제 존재하는 데이터 (퍼포먼스마케팅팀의 2024년 연말 평가)
-TEST_TEAM_ID = 600000  # 퍼포먼스마케팅팀
-TEST_PERIOD_ID = 4     # 2024년 연말
-TEST_TEAM_EVALUATION_ID = 2400000  # 해당 팀 평가
+# team_id=1로 테스트 (상수 정의 제거)
+# TEST_TEAM_ID = 1
+# TEST_PERIOD_ID = 4
+# TEST_TEAM_EVALUATION_ID = None
 
 # ====================================
-# 메인 실행 부분
+# team_id=1용 데이터 검증 함수
+# ====================================
+
+def find_team_evaluation_id_for_team_1():
+    """team_id=1에 해당하는 team_evaluation_id 찾기"""
+    try:
+        data_access = init_database()
+        query = """
+        SELECT team_evaluation_id, te.period_id, 
+               p.period_name, p.year,
+               te.average_achievement_rate
+        FROM team_evaluations te
+        JOIN periods p ON te.period_id = p.period_id
+        WHERE te.team_id = :team_id
+        ORDER BY p.year DESC, p.order_in_year DESC
+        LIMIT 5
+        """
+        results = data_access.db.fetch_all(query, {'team_id': 1})
+        if results:
+            print("🔍 team_id=1의 평가 데이터:")
+            for i, row in enumerate(results, 1):
+                print(f"   {i}. team_evaluation_id: {row['team_evaluation_id']}")
+                print(f"      period_id: {row['period_id']} ({row['period_name']})")
+                print(f"      year: {row['year']}")
+                print(f"      달성률: {row['average_achievement_rate'] or 'N/A'}")
+                print()
+            # 가장 최근 데이터 반환
+            return results[0]['team_evaluation_id'], results[0]['period_id']
+        else:
+            print("❌ team_id=1의 평가 데이터가 없습니다.")
+            return None, None
+    except Exception as e:
+        print(f"❌ 데이터 조회 실패: {str(e)}")
+        return None, None
+
+# ====================================
+# 메인 실행 부분 (수정)
 # ====================================
 
 if __name__ == "__main__":
-    # 단일 실행
-    print("🚀 Module 11 단일 실행")
-    result = asyncio.run(run_module_11(TEST_TEAM_ID, TEST_PERIOD_ID, TEST_TEAM_EVALUATION_ID))
-    print(f"✅ 실행 완료: {result}")
-    
-    # # 전체 테스트 실행
-    # print("\n🧪 전체 테스트 실행")
-    # test_results = asyncio.run(run_all_tests())
-    
-    # # 통합 테스트만 실행
-    # print("\n🔧 통합 테스트만 실행")
-    # integration_result = asyncio.run(test_improved_module11())
-    
-    # # 구성요소 테스트만 실행
-    # print("\n⚙️ 구성요소 테스트만 실행")
-    # component_results = asyncio.run(test_individual_components())
+    # team_id=1용 데이터 찾기
+    print("🔍 team_id=1용 데이터 검색 중...")
+    found_team_evaluation_id, found_period_id = find_team_evaluation_id_for_team_1()
+    if found_team_evaluation_id is not None and found_period_id is not None:
+        # 찾은 데이터로 실행
+        print(f"✅ 데이터 발견: team_evaluation_id={found_team_evaluation_id}, period_id={found_period_id}")
+        print("🚀 Module 11 실행 시작")
+        result = asyncio.run(run_module_11(1, found_period_id, found_team_evaluation_id))
+        print(f"✅ 실행 완료: {result}")
+        # 통합 테스트도 실행하고 싶으면 아래 주석 해제
+        # test_result = asyncio.run(test_improved_module11(1, found_period_id, found_team_evaluation_id))
+        # 전체 테스트 실행하고 싶으면 아래 주석 해제
+        # all_test_results = asyncio.run(run_all_tests(1, found_period_id, found_team_evaluation_id))
+    else:
+        print("❌ team_id=1에 해당하는 데이터를 찾을 수 없습니다.")
+        print("다른 team_id를 사용하거나 데이터를 확인해주세요.")

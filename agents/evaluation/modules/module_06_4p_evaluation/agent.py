@@ -30,7 +30,7 @@ from llm_utils import (
 # State 정의
 # ================================================================
 
-class Module6AgentState(TypedDict, total=True):
+class Module6AgentState(TypedDict):
     """모듈 6 (4P BARS 평가) 상태 - 병렬 처리 완전 지원"""
 
     # ✅ 병렬 누적 필드

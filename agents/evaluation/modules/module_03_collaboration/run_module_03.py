@@ -40,7 +40,13 @@ def run_module3_for_team_period(team_id: int, period_id: int, report_type: str, 
         report_type=report_type if report_type == "annual" else "quarterly",  # Literal 타입 보장
         team_id=team_id,
         period_id=period_id,
-        target_team_kpi_ids=kpi_ids
+        target_team_kpi_ids=kpi_ids,
+        # Optional 필드들을 명시적으로 초기화
+        collaboration_relationships=None,
+        individual_collaboration_analysis=None,
+        team_collaboration_matrix=None,
+        team_evaluation_id=None,
+        messages=None
     )
     
     # 워크플로우 실행
@@ -63,7 +69,7 @@ if __name__ == "__main__":
     }
     
     parser = argparse.ArgumentParser(description="Module3 Collaboration Runner")
-    parser.add_argument("--quarter", type=int, choices=[1,2,3,4], required=False, default=2, help="실행할 분기 (1,2,3,4). 기본값: 2")
+    parser.add_argument("--quarter", type=int, choices=[1,2,3,4], required=False, default=4, help="실행할 분기 (1,2,3,4). 기본값: 2")
     args = parser.parse_args()
     
     team_id = 1

@@ -6,7 +6,7 @@ import json
 import logging
 from datetime import datetime
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional, Any, Union
+from typing import Dict, List, Optional, Any, Union, TypedDict
 
 from db_utils import Module11DataAccess, DatabaseError, Module11Error
 from llm_utils import (
@@ -24,8 +24,7 @@ logger = logging.getLogger(__name__)
 # 상태 관리 데이터클래스
 # ====================================
 
-@dataclass
-class Module11AgentState:
+class Module11AgentState(TypedDict):
     """Module 11 에이전트 상태 관리"""
     # 필수 키값들
     team_id: int
@@ -34,14 +33,14 @@ class Module11AgentState:
     is_final: bool
     
     # 분석 과정에서 도출된 핵심 인사이트만 (가벼운 데이터)
-    key_risks: Optional[List[str]] = None
-    collaboration_bias_level: Optional[str] = None  # "high", "medium", "low"
-    performance_trend: Optional[str] = None
+    key_risks: Optional[List[str]]
+    collaboration_bias_level: Optional[str]  # "high", "medium", "low"
+    performance_trend: Optional[str]
     
     # 최종 JSON 결과
-    ai_risk_result: Optional[Dict[str, Any]] = None
-    ai_plan_result: Optional[Dict[str, Any]] = None
-    overall_comment_result: Optional[str] = None  # TEXT 형태
+    ai_risk_result: Optional[Dict[str, Any]]
+    ai_plan_result: Optional[Dict[str, Any]]
+    overall_comment_result: Optional[str]  # TEXT 형태
 
 # ====================================
 # 메인 에이전트 클래스
@@ -59,19 +58,25 @@ class Module11TeamRiskManagementAgent:
         logger.info(f"Module11 시작: team_id={team_id}, period_id={period_id}")
         
         try:
-            # 1. State 초기화
-            state = Module11AgentState(
-                team_id=team_id,
-                period_id=period_id,
-                team_evaluation_id=team_evaluation_id,
-                is_final=self._check_is_final(period_id)
-            )
+            # 1. State 초기화 - 딕셔너리 리터럴 방식으로 개선
+            state: Module11AgentState = {
+                "team_id": team_id,
+                "period_id": period_id,
+                "team_evaluation_id": team_evaluation_id,
+                "is_final": self._check_is_final(period_id),
+                "key_risks": None,
+                "collaboration_bias_level": None,
+                "performance_trend": None,
+                "ai_risk_result": None,
+                "ai_plan_result": None,
+                "overall_comment_result": None
+            }
             
             # 2. 데이터 수집
             data = self._collect_all_data_sequential(state)
             
             # 3. 리스크 분석
-            state.ai_risk_result = await self._analyze_parallel(state, data)
+            state["ai_risk_result"] = await self._analyze_parallel(state, data)
             
             # 4. 결과 생성 
             state = await self._generate_outputs_parallel(state, data)
@@ -97,40 +102,40 @@ class Module11TeamRiskManagementAgent:
     
     def _collect_all_data_sequential(self, state: Module11AgentState) -> Dict[str, Any]:
         """순차적 데이터 수집"""
-        logger.info(f"데이터 수집 시작: team_evaluation_id={state.team_evaluation_id}")
+        logger.info(f"데이터 수집 시작: team_evaluation_id={state['team_evaluation_id']}")
         
         data = {}
         
         try:
             # 1. 기본 정보
-            data['period_info'] = self.data_access.get_period_info(state.period_id)
-            data['team_info'] = self.data_access.get_team_info(state.team_id)
-            data['team_members'] = self.data_access.get_team_members(state.team_id)
+            data['period_info'] = self.data_access.get_period_info(state['period_id'])
+            data['team_info'] = self.data_access.get_team_info(state['team_id'])
+            data['team_members'] = self.data_access.get_team_members(state['team_id'])
             
             # 2. 성과 데이터
             year = data['period_info']['year']
-            data['team_kpis'] = self.data_access.get_team_kpis(state.team_id, year)
-            data['team_performance'] = self.data_access.get_team_performance(state.team_id, state.period_id)
+            data['team_kpis'] = self.data_access.get_team_kpis(state['team_id'], year)
+            data['team_performance'] = self.data_access.get_team_performance(state['team_id'], state['period_id'])
             
             # 3. 협업 분석 (JSON 파싱)
-            collaboration_data = self.data_access.get_collaboration_data(state.team_evaluation_id)
+            collaboration_data = self.data_access.get_collaboration_data(state['team_evaluation_id'])
             data['collaboration_matrix'] = parse_json_field(collaboration_data.get('ai_collaboration_matrix'))
             data['team_coaching'] = collaboration_data.get('ai_team_coaching')  # TEXT 필드
             
             # ai_team_comparison은 분기에만 필요
-            if not state.is_final:
+            if not state['is_final']:
                 data['team_comparison'] = collaboration_data.get('ai_team_comparison')  # TEXT 필드
             
             # 4. 개인 리스크
-            data['individual_risks'] = self.data_access.get_individual_risks(state.team_evaluation_id, state.is_final)
+            data['individual_risks'] = self.data_access.get_individual_risks(state['team_evaluation_id'], state['is_final'])
             
             # 5. 분기별/연말별 추가 데이터
-            if not state.is_final:
+            if not state['is_final']:
                 # 분기: 전분기 데이터
-                data['previous_quarter'] = self.data_access.get_previous_quarter_data(state.team_id, data['period_info'])
+                data['previous_quarter'] = self.data_access.get_previous_quarter_data(state['team_id'], data['period_info'])
             else:
                 # 연말: temp_evaluations 데이터
-                data['temp_evaluations'] = self.data_access.get_temp_evaluations(state.team_id)
+                data['temp_evaluations'] = self.data_access.get_temp_evaluations(state['team_id'])
             
             logger.info(f"데이터 수집 완료: {len(data)} 개 데이터셋")
             return data
@@ -188,7 +193,7 @@ class Module11TeamRiskManagementAgent:
 
 ## 팀 기본 정보:
 - 팀명: {team_info.get('team_name', '')}
-- 평가기간: {period_info.get('period_name', '')} ({'연말' if state.is_final else '분기'} 평가)
+- 평가기간: {period_info.get('period_name', '')} ({'연말' if state['is_final'] else '분기'} 평가)
 - 팀원 수: {len(team_members)}명
 - 팀 성과: 달성률 {team_performance.get('average_achievement_rate', 0)}%, 상대성과 {team_performance.get('relative_performance', 0)}%
 
@@ -254,8 +259,8 @@ class Module11TeamRiskManagementAgent:
             
             # State에 핵심 정보 저장
             major_risks = final_result.get('risk_analysis', {}).get('major_risks', [])
-            state.key_risks = [risk['risk_name'] for risk in major_risks]
-            state.collaboration_bias_level = collaboration_risks.get('bias_level', 'medium')
+            state['key_risks'] = [risk['risk_name'] for risk in major_risks]
+            state['collaboration_bias_level'] = collaboration_risks.get('bias_level', 'medium')
             
             logger.info(f"✅ 고품질 리스크 분석 완료: {len(major_risks)}개 리스크 식별")
             return final_result
@@ -504,7 +509,7 @@ class Module11TeamRiskManagementAgent:
         logger.info("최종 결과 생성 시작 (병렬)")
         
         try:
-            if state.is_final:
+            if state['is_final']:
                 # 연말: ai_plan과 overall_comment 병렬 생성
                 tasks = [
                     self._generate_annual_plan_with_llm_async(state, data),
@@ -512,12 +517,12 @@ class Module11TeamRiskManagementAgent:
                 ]
                 
                 ai_plan, overall_comment = await asyncio.gather(*tasks)
-                state.ai_plan_result = ai_plan
-                state.overall_comment_result = overall_comment
+                state["ai_plan_result"] = ai_plan
+                state["overall_comment_result"] = overall_comment
                 
             else:
                 # 분기: overall_comment만
-                state.overall_comment_result = await self._generate_overall_comment_with_llm_async(state, data)
+                state["overall_comment_result"] = await self._generate_overall_comment_with_llm_async(state, data)
             
             logger.info("최종 결과 생성 완료")
             return state
@@ -548,7 +553,7 @@ class Module11TeamRiskManagementAgent:
                 }
         
         prompt = f"""
-당신은 팀 운영 전략 수립 전문가입니다. 다음 종합 데이터를 바탕으로 차년도({period_info.get('year', get_year_from_period(state.period_id)) + 1}년) 팀 운영 계획을 수립해주세요.
+당신은 팀 운영 전략 수립 전문가입니다. 다음 종합 데이터를 바탕으로 차년도({period_info.get('year', get_year_from_period(state['period_id'])) + 1}년) 팀 운영 계획을 수립해주세요.
 
 ## 팀 기본 정보:
 {json.dumps(team_info, ensure_ascii=False, indent=2)}
@@ -563,7 +568,7 @@ class Module11TeamRiskManagementAgent:
 {json.dumps(individual_risks, ensure_ascii=False, indent=2)}
 
 ## 식별된 리스크:
-{json.dumps(state.ai_risk_result, ensure_ascii=False, indent=2)}
+{json.dumps(state["ai_risk_result"], ensure_ascii=False, indent=2)}
 
 ## 협업 분석 결과:
 {json.dumps(data.get('collaboration_matrix'), ensure_ascii=False, indent=2)}
@@ -630,7 +635,7 @@ class Module11TeamRiskManagementAgent:
     async def _generate_overall_comment_with_llm_async(self, state: Module11AgentState, data: Dict[str, Any]) -> str:
         """개선된 LLM 기반 총평 생성"""
         
-        if state.is_final:
+        if state['is_final']:
             return await self._generate_annual_overall_comment_text_improved(state, data)
         else:
             return await self._generate_quarterly_overall_comment_text_improved(state, data)
@@ -651,7 +656,7 @@ class Module11TeamRiskManagementAgent:
             'year_over_year_growth': team_performance.get('year_over_year_growth', 0),
             'kpi_count': len(team_kpis),
             'team_size': len(data.get('team_members', [])),
-            'temp_eval_avg': sum(eval.get('score', 0) for eval in temp_evaluations) / len(temp_evaluations) if temp_evaluations else 0
+            'temp_eval_avg': sum(eval.get('score', 0) or 0 for eval in temp_evaluations) / len(temp_evaluations) if temp_evaluations else 0
         }
         
         prompt = f"""
@@ -673,10 +678,10 @@ class Module11TeamRiskManagementAgent:
 {json.dumps([{'name': kpi.get('kpi_name'), 'weight': kpi.get('weight'), 'progress': kpi.get('ai_kpi_progress_rate')} for kpi in team_kpis], ensure_ascii=False, indent=2)}
 
 ## 식별된 주요 리스크:
-{json.dumps(state.key_risks, ensure_ascii=False)}
+{json.dumps(state['key_risks'], ensure_ascii=False)}
 
 ## 차년도 계획 요약:
-{json.dumps(state.ai_plan_result, ensure_ascii=False, indent=2)}
+{json.dumps(state["ai_plan_result"], ensure_ascii=False, indent=2)}
 
 다음 구조로 연말 총평을 작성해주세요:
 
@@ -745,7 +750,7 @@ class Module11TeamRiskManagementAgent:
 {team_comparison}
 
 ## 식별된 주요 리스크:
-{json.dumps(state.key_risks, ensure_ascii=False)}
+{json.dumps(state['key_risks'], ensure_ascii=False)}
 
 다음 구조로 분기 총평을 작성해주세요:
 
@@ -786,7 +791,7 @@ class Module11TeamRiskManagementAgent:
 
     def _save_results(self, state: Module11AgentState) -> None:
         """분석 결과를 DB에 저장"""
-        logger.info(f"분석 결과 저장 시작: team_evaluation_id={state.team_evaluation_id}")
+        logger.info(f"분석 결과 저장 시작: team_evaluation_id={state['team_evaluation_id']}")
         
         try:
             # 1. 저장할 데이터 준비
@@ -797,19 +802,19 @@ class Module11TeamRiskManagementAgent:
                 return
             
             # 2. 저장 전 검증 (존재하는 레코드인지 확인)
-            if not self.data_access.verify_team_evaluation_exists(state.team_evaluation_id):
-                raise DatabaseError(f"team_evaluation_id {state.team_evaluation_id}가 존재하지 않습니다.")
+            if not self.data_access.verify_team_evaluation_exists(state['team_evaluation_id']):
+                raise DatabaseError(f"team_evaluation_id {state['team_evaluation_id']}가 존재하지 않습니다.")
             
             # 3. 실제 업데이트
-            affected_rows = self.data_access.update_team_evaluations(state.team_evaluation_id, save_data)
+            affected_rows = self.data_access.update_team_evaluations(state['team_evaluation_id'], save_data)
             
             if affected_rows == 0:
-                raise DatabaseError(f"업데이트된 행이 없음: team_evaluation_id={state.team_evaluation_id}")
+                raise DatabaseError(f"업데이트된 행이 없음: team_evaluation_id={state['team_evaluation_id']}")
             
             # 4. 저장 후 검증
-            self.data_access.verify_save_success(state.team_evaluation_id, save_data)
+            self.data_access.verify_save_success(state['team_evaluation_id'], save_data)
             
-            logger.info(f"✅ 분석 결과 저장 완료: team_evaluation_id={state.team_evaluation_id}")
+            logger.info(f"✅ 분석 결과 저장 완료: team_evaluation_id={state['team_evaluation_id']}")
             
         except Exception as e:
             logger.error(f"❌ 분석 결과 저장 실패: {str(e)}")
@@ -820,18 +825,18 @@ class Module11TeamRiskManagementAgent:
         save_data = {}
         
         # ai_risk는 JSON으로 저장
-        if state.ai_risk_result:
-            save_data['ai_risk'] = json.dumps(state.ai_risk_result, ensure_ascii=False)
+        if state["ai_risk_result"]:
+            save_data['ai_risk'] = json.dumps(state["ai_risk_result"], ensure_ascii=False)
             logger.info(f"ai_risk 데이터 준비 완료: {len(save_data['ai_risk'])}자")
         
         # ai_plan은 JSON으로 저장 (연말만)
-        if state.is_final and state.ai_plan_result:
-            save_data['ai_plan'] = json.dumps(state.ai_plan_result, ensure_ascii=False)
+        if state['is_final'] and state["ai_plan_result"]:
+            save_data['ai_plan'] = json.dumps(state["ai_plan_result"], ensure_ascii=False)
             logger.info(f"ai_plan 데이터 준비 완료: {len(save_data['ai_plan'])}자")
         
         # overall_comment는 텍스트로 저장
-        if state.overall_comment_result:
-            save_data['overall_comment'] = state.overall_comment_result
+        if state["overall_comment_result"]:
+            save_data['overall_comment'] = state["overall_comment_result"]
             logger.info(f"overall_comment 데이터 준비 완료: {len(save_data['overall_comment'])}자")
         
         logger.info(f"총 {len(save_data)}개 필드 준비 완료: {list(save_data.keys())}")

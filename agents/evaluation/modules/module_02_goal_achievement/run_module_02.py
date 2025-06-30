@@ -36,7 +36,15 @@ def run_module2_for_team_period(team_id: int, period_id: int, report_type: str, 
         team_id=team_id,
         period_id=period_id,
         target_task_ids=target_task_ids,
-        target_team_kpi_ids=target_team_kpi_ids
+        target_team_kpi_ids=target_team_kpi_ids,
+        
+        # Optional 필드들을 명시적으로 초기화
+        updated_task_ids=None,
+        updated_team_kpi_ids=None,
+        feedback_report_ids=None,
+        team_evaluation_id=None,
+        final_evaluation_report_ids=None,
+        team_context_guide=None
     )
     
     # 워크플로우 실행
