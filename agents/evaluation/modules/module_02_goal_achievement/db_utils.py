@@ -15,10 +15,6 @@ from config.settings import *
 load_dotenv()
 
 # DB 설정
-current_dir = os.path.dirname(os.path.abspath(__file__))
-project_root = os.path.abspath(os.path.join(current_dir, '../../../../'))
-sys.path.append(project_root)
-
 db_config = DatabaseConfig()
 DATABASE_URL = db_config.DATABASE_URL
 engine = create_engine(DATABASE_URL, pool_pre_ping=True)
