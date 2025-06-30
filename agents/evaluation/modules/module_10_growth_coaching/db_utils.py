@@ -376,6 +376,15 @@ def save_manager_result(emp_no: str, period_id: int, manager_result: Dict) -> bo
             # 새 데이터 추가
             existing_data["general_coaching"].extend(manager_result["general_coaching"])
             existing_data["focused_coaching"].extend(manager_result["focused_coaching"])
+
+            # 정렬: general_coaching은 ranking 오름차순, focused_coaching은 ranking 내림차순
+            def get_ranking(item, default):
+                try:
+                    return int(item.get("ranking", default))
+                except Exception:
+                    return default
+            existing_data["general_coaching"].sort(key=lambda x: get_ranking(x, 9999))
+            existing_data["focused_coaching"].sort(key=lambda x: get_ranking(x, 0), reverse=True)
             
             # DB 업데이트
             update_query = text("""
