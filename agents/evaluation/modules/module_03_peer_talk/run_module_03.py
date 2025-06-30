@@ -6,10 +6,10 @@ from agents.evaluation.modules.module_03_peer_talk.db_utils import *
 from langchain_core.messages import HumanMessage
 
 def run_module3_single_employee(period_id: int, target_emp_no: str):
-    """모듈 4 단일 직원 분석 실행"""
+    """모듈 3 단일 직원 분석 실행"""
     # State 정의
     state = Module3AgentState(
-        messages=[HumanMessage(content=f"모듈 4: {target_emp_no} 동료평가 분석 시작")],
+        messages=[HumanMessage(content=f"모듈 3: {target_emp_no} 동료평가 분석 시작")],
         period_id=period_id,
         target_emp_no=target_emp_no,
         peer_evaluation_ids=[],
@@ -27,10 +27,10 @@ def run_module3_single_employee(period_id: int, target_emp_no: str):
     )
 
     # 그래프 생성 및 실행
-    print(f"🎯 모듈 4 실행 시작: {target_emp_no} ({period_id}분기)...")
+    print(f"🎯 모듈 3 실행 시작: {target_emp_no} ({period_id}분기)...")
     module3_graph = create_module3_graph()
     result = module3_graph.invoke(state)
-    print(f"✅ 모듈 4 실행 완료: {target_emp_no}")
+    print(f"✅ 모듈 3 실행 완료: {target_emp_no}")
     print(f"최종 메시지: {result['messages'][-1].content}")
     
     # 결과 요약 출력
@@ -44,8 +44,8 @@ def run_module3_single_employee(period_id: int, target_emp_no: str):
     return result
 
 def run_module3_multiple_employees(period_id: int, emp_list: List[str]):
-    """모듈 4 여러 직원 일괄 분석 실행"""
-    print(f"🚀 모듈 4 일괄 분석 시작: {len(emp_list)}명 ({period_id}분기)")
+    """모듈 3 여러 직원 일괄 분석 실행"""
+    print(f"🚀 모듈 3 일괄 분석 시작: {len(emp_list)}명 ({period_id}분기)")
     
     # 저장될 테이블 정보 표시
     table_name = "final_evaluation_reports" if period_id == 4 else "feedback_reports"
@@ -94,9 +94,9 @@ def run_module3_multiple_employees(period_id: int, emp_list: List[str]):
     return results
 
 def run_module3_period_analysis(period_id: int):
-    """모듈 4 분기 전체 분석 실행"""
+    """모듈 3 분기 전체 분석 실행"""
     print(f"="*80)
-    print(f"🚀 모듈 4: {period_id}분기 전체 직원 동료평가 분석 시작")
+    print(f"🚀 모듈 3: {period_id}분기 전체 직원 동료평가 분석 시작")
     print(f"="*80)
     
     # 해당 분기의 모든 평가 대상자 조회
@@ -113,12 +113,12 @@ def run_module3_period_analysis(period_id: int):
     # 일괄 분석 실행
     results = run_module3_multiple_employees(period_id, emp_list)
     
-    print(f"\n✅ 모듈 4: {period_id}분기 전체 분석 완료!")
+    print(f"\n✅ 모듈 3: {period_id}분기 전체 분석 완료!")
     return results
 
 def quick_module3_analysis(emp_no: str, period_id: int):
-    """모듈 4 빠른 단일 분석"""
-    print(f"🎯 모듈 4 빠른 분석: {emp_no} ({period_id}분기)")
+    """모듈 3 빠른 단일 분석"""
+    print(f"🎯 모듈 3 빠른 분석: {emp_no} ({period_id}분기)")
     
     # 기존 분석 결과 확인
     if check_existing_peer_evaluation_by_period(period_id, emp_no):
@@ -148,7 +148,7 @@ if __name__ == "__main__":
     run_module3_period_analysis(2)
     run_module3_period_analysis(4)
     
-    print("\n🎉 모듈 4 실행 스크립트 로드 완료!")
+    print("\n🎉 모듈 3 실행 스크립트 로드 완료!")
     # print("사용 가능한 함수들:")
     # print("- run_module3_single_employee(period_id, target_emp_no)")
     # print("- run_module3_multiple_employees(period_id, emp_list)")

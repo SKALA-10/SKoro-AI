@@ -11,9 +11,6 @@ from dataclasses import dataclass
 from agents.evaluation.modules.module_04_collaboration.db_utils import *
 from agents.evaluation.modules.module_04_collaboration.llm_utils import *
 
-# ================================================================
-# Module4State 정의 (모듈 2와 일관된 구조)
-# ================================================================
 
 class Module4State(TypedDict):
     """모듈 4 협업 분석 State - 모듈 2와 일관된 DB 기반 전달 방식"""

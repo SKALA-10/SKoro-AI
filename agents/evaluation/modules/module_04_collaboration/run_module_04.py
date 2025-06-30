@@ -1,5 +1,5 @@
 # ================================================================
-# run_module3.py - 모듈 3 실행 파일
+# run_module3.py - 모듈 4 실행 파일
 # ================================================================
 
 import sys
@@ -18,7 +18,7 @@ from agents.evaluation.modules.module_04_collaboration.db_utils import *
 
 def run_module3_for_team_period(team_id: int, period_id: int, report_type: str, target_team_kpi_ids: Optional[list] = None):
     """
-    모듈 3 전체 워크플로우 실행 함수
+    모듈 4 전체 워크플로우 실행 함수
     Args:
         team_id: 팀 ID
         period_id: 평가 기간 ID (분기)
@@ -26,7 +26,7 @@ def run_module3_for_team_period(team_id: int, period_id: int, report_type: str, 
         target_team_kpi_ids: 평가 대상 KPI ID 리스트 (None이면 자동 조회)
     """
     print(f"\n============================")
-    print(f"[모듈3] 팀 {team_id}, 기간 {period_id} ({'연말' if report_type == 'annual' else '분기'}) 협업 분석 실행")
+    print(f"[모듈 4] 팀 {team_id}, 기간 {period_id} ({'연말' if report_type == 'annual' else '분기'}) 협업 분석 실행")
     print(f"============================\n")
     
     # KPI ID 자동 조회 (지정되지 않은 경우)

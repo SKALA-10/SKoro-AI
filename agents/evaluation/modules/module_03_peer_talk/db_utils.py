@@ -20,7 +20,7 @@ def row_to_dict(row: Row) -> Dict[str, Any]:
     return row._asdict() # ._asdict() 사용
 
 
-# --- 모듈 4 전용 데이터 조회 함수들 ---
+# --- 모듈 3 전용 데이터 조회 함수들 ---
 
 def fetch_peer_evaluations_for_target(period_id: int, target_emp_no: str) -> List[Dict]:
     """
@@ -165,7 +165,7 @@ def get_team_evaluation_id_by_emp_and_period(emp_no: str, period_id: int) -> Opt
         return row_to_dict(result)["team_evaluation_id"] if result else None
 
 
-# --- 모듈 4 전용 DB 저장 함수들 ---
+# --- 모듈 3 전용 DB 저장 함수들 ---
 
 def format_peer_evaluation_result(strengths: List[str], concerns: List[str], collaboration_observations: List[str]) -> str:
     """강점, 우려, 협업관찰을 JSON 문자열로 포맷팅"""

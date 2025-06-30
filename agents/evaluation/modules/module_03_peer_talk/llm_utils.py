@@ -59,7 +59,7 @@ def get_keyword_score(keyword: str, positive_keywords: set, negative_keywords: s
         return 0.0
 
 
-# --- 모듈 4 전용 LLM 호출 함수들 ---
+# --- 모듈 3 전용 LLM 호출 함수들 ---
 
 def call_llm_for_peer_evaluation_context(keywords: str, work_situation: str, weight: float) -> Dict:
     """동료평가 맥락 문장 생성"""

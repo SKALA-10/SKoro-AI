@@ -13,8 +13,8 @@ from langgraph.graph import StateGraph, START, END
 # --- Module3AgentState 정의 ---
 class Module3AgentState(TypedDict):
     """
-    모듈 4 (동료평가 분석 모듈)의 내부 상태를 정의합니다.
-    이 상태는 모듈 4 내의 모든 서브모듈이 공유하고 업데이트합니다.
+    모듈 3 (동료평가 분석 모듈)의 내부 상태를 정의합니다.
+    이 상태는 모듈 3 내의 모든 서브모듈이 공유하고 업데이트합니다.
     """
     messages: Annotated[List[HumanMessage], operator.add] 
 
@@ -49,7 +49,7 @@ class Module3AgentState(TypedDict):
 # 1. 데이터 수집 서브모듈
 def data_collection_submodule(state: Module3AgentState) -> Dict:
     """동료평가 데이터 수집 및 초기화"""
-    messages = state.get("messages", []) + [HumanMessage(content="모듈 4: 동료평가 데이터 수집 시작")] 
+    messages = state.get("messages", []) + [HumanMessage(content="모듈 3: 동료평가 데이터 수집 시작")] 
     
     try:
         period_id = state["period_id"]
@@ -59,7 +59,7 @@ def data_collection_submodule(state: Module3AgentState) -> Dict:
         peer_evaluations = fetch_peer_evaluations_for_target(period_id, target_emp_no)
         
         if not peer_evaluations:
-            messages = messages + [HumanMessage(content=f"모듈 4: {target_emp_no} 동료평가 데이터 없음")]
+            messages = messages + [HumanMessage(content=f"모듈 3: {target_emp_no} 동료평가 데이터 없음")]
             return {
                 "messages": messages,
                 "peer_evaluation_ids": [],
@@ -95,7 +95,7 @@ def data_collection_submodule(state: Module3AgentState) -> Dict:
             else:
                 task_summaries.append("")
         
-        messages = messages + [HumanMessage(content=f"모듈 4: 동료평가 데이터 수집 완료 ({len(peer_evaluations)}건)")]
+        messages = messages + [HumanMessage(content=f"모듈 3: 동료평가 데이터 수집 완료 ({len(peer_evaluations)}건)")]
         
         return {
             "messages": messages,
@@ -107,7 +107,7 @@ def data_collection_submodule(state: Module3AgentState) -> Dict:
         }
         
     except Exception as e:
-        messages = messages + [HumanMessage(content=f"모듈 4: 데이터 수집 실패 - {str(e)}")]
+        messages = messages + [HumanMessage(content=f"모듈 3: 데이터 수집 실패 - {str(e)}")]
         return {
             "messages": messages,
             "peer_evaluation_ids": [],
@@ -121,7 +121,7 @@ def data_collection_submodule(state: Module3AgentState) -> Dict:
 # 2. 맥락 생성 서브모듈
 def context_generation_submodule(state: Module3AgentState) -> Dict:
     """동료평가 맥락 문장 생성"""
-    messages = state.get("messages", []) + [HumanMessage(content="모듈 4: 동료평가 맥락 생성 시작")]
+    messages = state.get("messages", []) + [HumanMessage(content="모듈 3: 동료평가 맥락 생성 시작")]
     
     try:
         target_emp_no = state["target_emp_no"]
@@ -130,7 +130,7 @@ def context_generation_submodule(state: Module3AgentState) -> Dict:
         evaluation_weights = state.get("evaluation_weights", [])
         
         if not keyword_collections:
-            messages = messages + [HumanMessage(content="모듈 4: 키워드 데이터 없음, 맥락 생성 스킵")]
+            messages = messages + [HumanMessage(content="모듈 3: 키워드 데이터 없음, 맥락 생성 스킵")]
             return {"messages": messages, "peer_evaluation_summary_sentences": []}
         
         summary_sentences = []
@@ -144,43 +144,43 @@ def context_generation_submodule(state: Module3AgentState) -> Dict:
             summary_sentence = llm_result.get("context_sentence", "업무 진행 과정에서 동료가 다양한 특성을 보임")
             summary_sentences.append(summary_sentence)
         
-        messages = messages + [HumanMessage(content=f"모듈 4: 동료평가 맥락 생성 완료 ({len(summary_sentences)}개 문장)")]
+        messages = messages + [HumanMessage(content=f"모듈 3: 동료평가 맥락 생성 완료 ({len(summary_sentences)}개 문장)")]
         
         return {"messages": messages, "peer_evaluation_summary_sentences": summary_sentences}
         
     except Exception as e:
-        messages = messages + [HumanMessage(content=f"모듈 4: 맥락 생성 실패 - {str(e)}")]
+        messages = messages + [HumanMessage(content=f"모듈 3: 맥락 생성 실패 - {str(e)}")]
         return {"messages": messages, "peer_evaluation_summary_sentences": []}
 
 
 # 3. 가중치 분석 서브모듈
 def weighted_analysis_submodule(state: Module3AgentState) -> Dict:
     """키워드 가중치 분석"""
-    messages = state.get("messages", []) + [HumanMessage(content="모듈 4: 가중치 분석 시작")]
+    messages = state.get("messages", []) + [HumanMessage(content="모듈 3: 가중치 분석 시작")]
     
     try:
         keyword_collections = state.get("keyword_collections", [])
         evaluation_weights = state.get("evaluation_weights", [])
         
         if not keyword_collections:
-            messages = messages + [HumanMessage(content="모듈 4: 키워드 데이터 없음, 가중치 분석 스킵")]
+            messages = messages + [HumanMessage(content="모듈 3: 키워드 데이터 없음, 가중치 분석 스킵")]
             return {"messages": messages, "weighted_analysis_result": {}}
         
         analysis_result = call_llm_for_keyword_weighted_analysis(keyword_collections, evaluation_weights)
         
-        messages = messages + [HumanMessage(content="모듈 4: 가중치 분석 완료")]
+        messages = messages + [HumanMessage(content="모듈 3: 가중치 분석 완료")]
         
         return {"messages": messages, "weighted_analysis_result": analysis_result}
         
     except Exception as e:
-        messages = messages + [HumanMessage(content=f"모듈 4: 가중치 분석 실패 - {str(e)}")]
+        messages = messages + [HumanMessage(content=f"모듈 3: 가중치 분석 실패 - {str(e)}")]
         return {"messages": messages, "weighted_analysis_result": {}}
 
 
 # 4. 피드백 생성 서브모듈
 def feedback_generation_submodule(state: Module3AgentState) -> Dict:
     """최종 피드백 생성 (강점, 우려, 협업관찰)"""
-    messages = state.get("messages", []) + [HumanMessage(content="모듈 4: 피드백 생성 시작")]
+    messages = state.get("messages", []) + [HumanMessage(content="모듈 3: 피드백 생성 시작")]
     
     try:
         target_emp_no = state["target_emp_no"]
@@ -205,7 +205,7 @@ def feedback_generation_submodule(state: Module3AgentState) -> Dict:
         concerns = [feedback_result.get("concerns", "지속적인 성장을 위한 개선 영역이 있습니다")]
         collaboration_observations = [feedback_result.get("collaboration_observations", "팀 내에서 협업에 참여하고 있습니다")]
         
-        messages = messages + [HumanMessage(content="모듈 4: 피드백 생성 완료")]
+        messages = messages + [HumanMessage(content="모듈 3: 피드백 생성 완료")]
         
         return {
             "messages": messages,
@@ -215,7 +215,7 @@ def feedback_generation_submodule(state: Module3AgentState) -> Dict:
         }
         
     except Exception as e:
-        messages = messages + [HumanMessage(content=f"모듈 4: 피드백 생성 실패 - {str(e)}")]
+        messages = messages + [HumanMessage(content=f"모듈 3: 피드백 생성 실패 - {str(e)}")]
         
         return {
             "messages": messages,
@@ -228,7 +228,7 @@ def feedback_generation_submodule(state: Module3AgentState) -> Dict:
 # 5. DB 저장 서브모듈
 def database_storage_submodule(state: Module3AgentState) -> Dict:
     """분기별 DB 저장 (feedback_reports 또는 final_evaluation_reports)"""
-    messages = state.get("messages", []) + [HumanMessage(content="모듈 4: DB 저장 시작")]
+    messages = state.get("messages", []) + [HumanMessage(content="모듈 3: DB 저장 시작")]
     
     try:
         period_id = state["period_id"]
@@ -247,37 +247,37 @@ def database_storage_submodule(state: Module3AgentState) -> Dict:
             report_id = save_final_evaluation_peer_summary(target_emp_no, period_id, peer_talk_summary)
             
             if report_id:
-                messages = messages + [HumanMessage(content=f"모듈 4: final_evaluation_reports 저장 완료 (ID: {report_id})")]
+                messages = messages + [HumanMessage(content=f"모듈 3: final_evaluation_reports 저장 완료 (ID: {report_id})")]
                 return {"messages": messages, "final_evaluation_report_id": report_id}
             else:
-                messages = messages + [HumanMessage(content="모듈 4: final_evaluation_reports 저장 실패")]
+                messages = messages + [HumanMessage(content="모듈 3: final_evaluation_reports 저장 실패")]
                 return {"messages": messages}
         else:
             # feedback_reports 테이블
             report_id = save_feedback_peer_summary(target_emp_no, period_id, peer_talk_summary)
             
             if report_id:
-                messages = messages + [HumanMessage(content=f"모듈 4: feedback_reports 저장 완료 (ID: {report_id})")]
+                messages = messages + [HumanMessage(content=f"모듈 3: feedback_reports 저장 완료 (ID: {report_id})")]
                 return {"messages": messages, "feedback_report_id": report_id}
             else:
-                messages = messages + [HumanMessage(content="모듈 4: feedback_reports 저장 실패")]
+                messages = messages + [HumanMessage(content="모듈 3: feedback_reports 저장 실패")]
                 return {"messages": messages}
         
     except Exception as e:
-        messages = messages + [HumanMessage(content=f"모듈 4: DB 저장 실패 - {str(e)}")]
+        messages = messages + [HumanMessage(content=f"모듈 3: DB 저장 실패 - {str(e)}")]
         return {"messages": messages}
 
 
 # 6. 포맷터 서브모듈
 def formatter_submodule(state: Module3AgentState) -> Dict:
     """최종 결과 포맷팅"""
-    messages = state.get("messages", []) + [HumanMessage(content="모듈 4: 동료평가 분석 완료")]
+    messages = state.get("messages", []) + [HumanMessage(content="모듈 3: 동료평가 분석 완료")]
     return {"messages": messages}
 
 
 # --- 워크플로우 생성 ---
 def create_module3_graph():
-    """모듈 4 그래프 생성 및 반환"""
+    """모듈 3 그래프 생성 및 반환"""
     module4_workflow = StateGraph(Module3AgentState)
     
     # 노드 추가
