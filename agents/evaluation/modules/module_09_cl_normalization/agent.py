@@ -8,15 +8,8 @@ import operator
 from langgraph.graph import StateGraph, START, END
 import statistics
 
-from db_utils import (
-    fetch_headquarter_members,
-    batch_update_final_evaluation_reports,
-    batch_update_final_evaluation_ranking
-)
-
-from normalization_utils import (
-    normalize_cl_group
-)
+from agents.evaluation.modules.module_09_cl_normalization.db_utils import *
+from agents.evaluation.modules.module_09_cl_normalization.normalization_utils import *
 
 # ================================================================
 # HeadquarterModule9AgentState 정의 - 본부 단위 처리
