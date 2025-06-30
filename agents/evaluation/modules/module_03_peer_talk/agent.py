@@ -1,5 +1,5 @@
-from db_utils import *
-from llm_utils import *
+from agents.evaluation.modules.module_03_peer_talk.db_utils import *
+from agents.evaluation.modules.module_03_peer_talk.llm_utils import *
 
 from dotenv import load_dotenv
 load_dotenv()
@@ -10,8 +10,8 @@ import operator
 from langgraph.graph import StateGraph, START, END
 
 
-# --- Module4AgentState 정의 ---
-class Module4AgentState(TypedDict):
+# --- Module3AgentState 정의 ---
+class Module3AgentState(TypedDict):
     """
     모듈 4 (동료평가 분석 모듈)의 내부 상태를 정의합니다.
     이 상태는 모듈 4 내의 모든 서브모듈이 공유하고 업데이트합니다.
@@ -47,7 +47,7 @@ class Module4AgentState(TypedDict):
 # --- 서브모듈 함수 정의 ---
 
 # 1. 데이터 수집 서브모듈
-def data_collection_submodule(state: Module4AgentState) -> Dict:
+def data_collection_submodule(state: Module3AgentState) -> Dict:
     """동료평가 데이터 수집 및 초기화"""
     messages = state.get("messages", []) + [HumanMessage(content="모듈 4: 동료평가 데이터 수집 시작")] 
     
@@ -119,7 +119,7 @@ def data_collection_submodule(state: Module4AgentState) -> Dict:
 
 
 # 2. 맥락 생성 서브모듈
-def context_generation_submodule(state: Module4AgentState) -> Dict:
+def context_generation_submodule(state: Module3AgentState) -> Dict:
     """동료평가 맥락 문장 생성"""
     messages = state.get("messages", []) + [HumanMessage(content="모듈 4: 동료평가 맥락 생성 시작")]
     
@@ -154,7 +154,7 @@ def context_generation_submodule(state: Module4AgentState) -> Dict:
 
 
 # 3. 가중치 분석 서브모듈
-def weighted_analysis_submodule(state: Module4AgentState) -> Dict:
+def weighted_analysis_submodule(state: Module3AgentState) -> Dict:
     """키워드 가중치 분석"""
     messages = state.get("messages", []) + [HumanMessage(content="모듈 4: 가중치 분석 시작")]
     
@@ -178,7 +178,7 @@ def weighted_analysis_submodule(state: Module4AgentState) -> Dict:
 
 
 # 4. 피드백 생성 서브모듈
-def feedback_generation_submodule(state: Module4AgentState) -> Dict:
+def feedback_generation_submodule(state: Module3AgentState) -> Dict:
     """최종 피드백 생성 (강점, 우려, 협업관찰)"""
     messages = state.get("messages", []) + [HumanMessage(content="모듈 4: 피드백 생성 시작")]
     
@@ -226,7 +226,7 @@ def feedback_generation_submodule(state: Module4AgentState) -> Dict:
 
 
 # 5. DB 저장 서브모듈
-def database_storage_submodule(state: Module4AgentState) -> Dict:
+def database_storage_submodule(state: Module3AgentState) -> Dict:
     """분기별 DB 저장 (feedback_reports 또는 final_evaluation_reports)"""
     messages = state.get("messages", []) + [HumanMessage(content="모듈 4: DB 저장 시작")]
     
@@ -269,16 +269,16 @@ def database_storage_submodule(state: Module4AgentState) -> Dict:
 
 
 # 6. 포맷터 서브모듈
-def formatter_submodule(state: Module4AgentState) -> Dict:
+def formatter_submodule(state: Module3AgentState) -> Dict:
     """최종 결과 포맷팅"""
     messages = state.get("messages", []) + [HumanMessage(content="모듈 4: 동료평가 분석 완료")]
     return {"messages": messages}
 
 
 # --- 워크플로우 생성 ---
-def create_module4_graph():
+def create_module3_graph():
     """모듈 4 그래프 생성 및 반환"""
-    module4_workflow = StateGraph(Module4AgentState)
+    module4_workflow = StateGraph(Module3AgentState)
     
     # 노드 추가
     module4_workflow.add_node("data_collection", data_collection_submodule)
