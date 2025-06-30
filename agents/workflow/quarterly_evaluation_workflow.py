@@ -1,3 +1,14 @@
+# =====================================
+# 사용 예시 (터미널 실행 명령어)
+# =====================================
+# 전체 팀 자동 실행 (분기 2):
+#   python agents/workflow/quarterly_evaluation_workflow.py --period-id 2 --auto
+# 특정 팀만 자동 실행 (예: 팀 1):
+#   python agents/workflow/quarterly_evaluation_workflow.py --period-id 2 --auto --teams 1
+# 여러 팀 지정 (예: 팀 1, 3, 5):
+#   python agents/workflow/quarterly_evaluation_workflow.py --period-id 2 --auto --teams 1,3,5
+# =====================================
+
 import argparse
 import logging
 from agents.workflow.workflow_utils import (
@@ -11,8 +22,9 @@ from agents.evaluation.modules.module_02_goal_achievement.db_utils import fetch_
 from agents.evaluation.modules.module_08_team_comparision.agent import create_module8_graph
 from agents.evaluation.modules.module_10_growth_coaching.agent import create_module10_graph
 from agents.evaluation.modules.module_11_team_coaching.agent import Module11TeamRiskManagementAgent
-from agents.evaluation.modules.module_11_team_coaching.db_utils import Module11DataAccess
+from agents.evaluation.modules.module_11_team_coaching.db_utils import Module11DataAccess, SQLAlchemyDBWrapper, engine
 import asyncio
+import sys
 
 logging.basicConfig(level=logging.INFO, format='[%(asctime)s] %(levelname)s: %(message)s')
 logging.getLogger("httpx").setLevel(logging.WARNING)
@@ -115,12 +127,11 @@ def run_phase2_all_teams(teams, period_id):
         logging.info(f"[Phase2] 팀 {team_id} 완료")
 
 # Phase 3: 전사 모듈8,10,11 (구조만)
-def run_phase3_all_modules(period_id: int):
+def run_phase3_all_modules(period_id: int, teams):
     """
     Phase3: 전사 모듈8(팀 성과 비교), 10(개인 성장 코칭), 11(팀 리스크) 실행
     """
     logging.info("Phase3: 전사 모듈8,10,11 실행 시작")
-    teams = get_target_teams(period_id)
     logging.info(f"[Phase3] 전체 대상 팀: {teams}")
 
     # 1. 모듈8: 팀 성과 비교 (팀 단위)
@@ -176,12 +187,12 @@ def run_phase3_all_modules(period_id: int):
 
     # 3. 모듈11: 팀 리스크 (팀 단위, async)
     async def run_module11_for_all_teams():
-        data_access = Module11DataAccess()
+        db_wrapper = SQLAlchemyDBWrapper(engine)
+        data_access = Module11DataAccess(db_wrapper)
         agent11 = Module11TeamRiskManagementAgent(data_access)
         tasks = []
         for team_id in teams:
             try:
-                # team_evaluation_id 조회
                 from agents.evaluation.modules.module_02_goal_achievement.db_utils import fetch_team_evaluation_id
                 team_evaluation_id = fetch_team_evaluation_id(team_id, period_id)
                 if not team_evaluation_id:
@@ -196,12 +207,46 @@ def run_phase3_all_modules(period_id: int):
     asyncio.run(run_module11_for_all_teams())
     logging.info("Phase3: 완료")
 
+def run_auto_workflow(period_id: int, specific_teams=None):
+    """
+    --auto 옵션: Phase1/2(팀별 평가) → 동기화 체크 → Phase3(전사 모듈)까지 자동 실행
+    """
+    logging.info("[AUTO] 전체 평가 자동 실행 시작")
+    teams = get_target_teams(period_id, specific_teams)
+    logging.info(f"[AUTO] 평가 대상 팀: {teams}")
+
+    # Phase1/2: 팀별 평가
+    run_phase1_all_teams(teams, period_id)
+    run_phase2_all_teams(teams, period_id)
+
+    # 동기화 체크
+    all_completed = check_all_teams_phase_completed(teams, period_id, 'AI_PHASE2_COMPLETED')
+    if not all_completed:
+        logging.warning(f"[AUTO] 일부 팀이 아직 Phase2를 완료하지 못했습니다. (계속 진행)")
+    else:
+        logging.info("[AUTO] 모든 팀이 Phase2를 완료했습니다.")
+
+    # Phase3: 전사 모듈 자동 실행
+    run_phase3_all_modules(period_id, teams)
+    logging.info("[AUTO] 전체 평가 자동 실행 완료!")
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--period-id', type=int, required=True)
-    parser.add_argument('--teams', help='1,2,3 or all', required=True)
-    parser.add_argument('--phase3', action='store_true', help='Run Phase3')
+    parser.add_argument('--teams', help='1,2,3 or all', required=False, default=None)
+    parser.add_argument('--auto', action='store_true', help='모든 단계 자동 실행')
     args = parser.parse_args()
+
+    # --auto 옵션: 전체 or 특정 팀만 자동 실행
+    if args.auto:
+        if args.teams and args.teams != 'all':
+            team_list = parse_teams(args.teams)
+            logging.info(f"[AUTO] 지정된 팀만 자동 실행: {team_list}")
+        else:
+            team_list = None
+            logging.info("[AUTO] 전체 팀 자동 실행")
+        run_auto_workflow(args.period_id, team_list)
+        sys.exit(0)
 
     teams = get_target_teams(args.period_id, parse_teams(args.teams))
     logging.info(f"🚀 평가 시작: {len(teams)}개 팀")
@@ -214,8 +259,7 @@ def main():
     if not check_all_teams_phase_completed(teams, args.period_id, "AI_PHASE2_COMPLETED"):
         logging.warning("일부 팀이 Phase2를 완료하지 못했습니다. 중단합니다.")
         return
-    if args.phase3:
-        run_phase3_all_modules(args.period_id)
+    run_phase3_all_modules(args.period_id, teams)
     logging.info("분기별 평가 워크플로우 전체 완료!")
 
 if __name__ == "__main__":

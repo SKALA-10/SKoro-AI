@@ -1,6 +1,7 @@
 import logging
 from typing import List, Optional
 from agents.evaluation.modules.module_02_goal_achievement import db_utils
+from sqlalchemy import bindparam
 
 def get_target_teams(period_id: int, specific_teams: Optional[List[int]] = None) -> List[int]:
     """
@@ -14,8 +15,8 @@ def get_target_teams(period_id: int, specific_teams: Optional[List[int]] = None)
                 SELECT DISTINCT team_id FROM team_evaluations
                 WHERE period_id = :period_id AND team_id IN :team_ids
                 """
-            )
-            result = connection.execute(query, {"period_id": period_id, "team_ids": tuple(specific_teams)})
+            ).bindparams(bindparam('team_ids', expanding=True))
+            result = connection.execute(query, {"period_id": period_id, "team_ids": specific_teams})
         else:
             query = db_utils.text(
                 """
@@ -52,8 +53,8 @@ def check_all_teams_phase_completed(teams: List[int], period_id: int, phase_stat
             SELECT COUNT(*) FROM team_evaluations
             WHERE period_id = :period_id AND team_id IN :team_ids AND status != :phase_status
             """
-        )
-        result = connection.execute(query, {"period_id": period_id, "team_ids": tuple(teams), "phase_status": phase_status})
+        ).bindparams(bindparam('team_ids', expanding=True))
+        result = connection.execute(query, {"period_id": period_id, "team_ids": teams, "phase_status": phase_status})
         count = result.scalar_one()
     logging.info(f"동기화 체크: {count}개 팀이 아직 {phase_status} 미달성")
     return count == 0
