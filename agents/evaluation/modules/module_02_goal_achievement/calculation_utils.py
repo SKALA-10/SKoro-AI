@@ -5,7 +5,7 @@
 import re
 import logging
 from typing import List, Dict, Optional
-from db_utils import fetch_team_kpi_data
+from agents.evaluation.modules.module_02_goal_achievement.db_utils import *
 
 logger = logging.getLogger(__name__)
 
@@ -83,7 +83,7 @@ def calculate_individual_weighted_achievement_rate(individual_tasks: List[Dict])
 
 def get_evaluation_criteria(team_kpi_id: int) -> List[str]:
     """우리가 상의한 평가 기준 처리 로직"""
-    from db_utils import fetch_team_kpi_data
+    from agents.evaluation.modules.module_02_goal_achievement.db_utils import fetch_team_kpi_data
     
     kpi_data = fetch_team_kpi_data(team_kpi_id)
     grade_rule = kpi_data.get('grade_rule')
@@ -125,7 +125,7 @@ def parse_criteria_from_grade_rule(grade_rule: str) -> Optional[List[str]]:
 
 def calculate_quantitative_contributions(kpi_id: int, period_id: int) -> Dict[str, float]:
     """정량 평가 기여도 계산"""
-    from db_utils import fetch_kpi_tasks
+    from agents.evaluation.modules.module_02_goal_achievement.db_utils import fetch_kpi_tasks
     
     tasks = fetch_kpi_tasks(kpi_id, period_id)
     

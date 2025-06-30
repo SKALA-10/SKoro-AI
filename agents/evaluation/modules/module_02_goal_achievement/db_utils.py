@@ -10,13 +10,14 @@ from sqlalchemy import create_engine, text
 from sqlalchemy.engine import Row
 from dotenv import load_dotenv
 
+from config.settings import *
+
 load_dotenv()
 
 # DB 설정
 current_dir = os.path.dirname(os.path.abspath(__file__))
 project_root = os.path.abspath(os.path.join(current_dir, '../../../../'))
 sys.path.append(project_root)
-from config.settings import DatabaseConfig
 
 db_config = DatabaseConfig()
 DATABASE_URL = db_config.DATABASE_URL
