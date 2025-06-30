@@ -1,5 +1,5 @@
 # ================================================================
-# agent_module3.py - 모듈 3 LangGraph 에이전트 및 상태 관리
+# agent_module4.py - 모듈 4 LangGraph 에이전트 및 상태 관리
 # ================================================================
 
 from typing import Annotated, List, Literal, TypedDict, Dict, Optional
@@ -8,29 +8,15 @@ import operator
 from langgraph.graph import StateGraph, START, END
 from dataclasses import dataclass
 
-from db_utils import (
-    fetch_collaboration_tasks_by_kpi,
-    fetch_peer_talk_summary,
-    fetch_team_members_with_tasks,
-    save_collaboration_matrix_to_db,
-    fetch_team_evaluation_id
-)
-
-from llm_utils import (
-    call_llm_for_collaboration_detection,
-    call_llm_for_team_role_analysis,
-    call_llm_for_collaboration_bias_analysis,
-    call_llm_for_peer_talk_summary,
-    call_llm_for_overall_evaluation,
-    call_llm_for_team_summary
-)
+from agents.evaluation.modules.module_04_collaboration.db_utils import *
+from agents.evaluation.modules.module_04_collaboration.llm_utils import *
 
 # ================================================================
-# Module3State 정의 (모듈 2와 일관된 구조)
+# Module4State 정의 (모듈 2와 일관된 구조)
 # ================================================================
 
-class Module3State(TypedDict):
-    """모듈 3 협업 분석 State - 모듈 2와 일관된 DB 기반 전달 방식"""
+class Module4State(TypedDict):
+    """모듈 4 협업 분석 State - 모듈 2와 일관된 DB 기반 전달 방식"""
     # 기본 정보
     report_type: Literal["quarterly", "annual"]
     team_id: int
@@ -52,13 +38,13 @@ class Module3State(TypedDict):
 # 서브모듈 함수들
 # ================================================================
 
-def collaboration_data_collection_submodule(state: Module3State) -> Module3State:
+def collaboration_data_collection_submodule(state: Module4State) -> Module4State:
     """
     협업 분석을 위한 기초 데이터를 수집합니다.
     - 동일 KPI 내 Task 그룹핑
     - Task Summary 데이터 수집
     """
-    print("=== 모듈 3: 협업 데이터 수집 시작 ===")
+    print("=== 모듈 4: 협업 데이터 수집 시작 ===")
     
     # team_evaluation_id 확인/생성
     team_evaluation_id = fetch_team_evaluation_id(state["team_id"], state["period_id"])
@@ -97,12 +83,12 @@ def collaboration_data_collection_submodule(state: Module3State) -> Module3State
     state["collaboration_relationships"] = collaboration_relationships
     return state
 
-def individual_collaboration_analysis_submodule(state: Module3State) -> Module3State:
+def individual_collaboration_analysis_submodule(state: Module4State) -> Module4State:
     """
     Task Summary를 LLM으로 분석하여 실제 협업 관계를 확인하고,
     개인별 협업 패턴을 분석합니다.
     """
-    print("=== 모듈 3: 개인 협업 분석 시작 ===")
+    print("=== 모듈 4: 개인 협업 분석 시작 ===")
     
     # 1. LLM으로 실제 협업 관계 확인
     confirmed_collaborations = []
@@ -187,11 +173,11 @@ def individual_collaboration_analysis_submodule(state: Module3State) -> Module3S
     state["individual_collaboration_analysis"] = individual_analysis
     return state
 
-def team_collaboration_network_submodule(state: Module3State) -> Module3State:
+def team_collaboration_network_submodule(state: Module4State) -> Module4State:
     """
     팀 전체 협업 네트워크 매트릭스를 생성합니다.
     """
-    print("=== 모듈 3: 팀 협업 네트워크 분석 시작 ===")
+    print("=== 모듈 4: 팀 협업 네트워크 분석 시작 ===")
     
     individual_analysis = state["individual_collaboration_analysis"] or {}
     period_id = state["period_id"]
@@ -295,19 +281,19 @@ def team_collaboration_network_submodule(state: Module3State) -> Module3State:
     state["team_collaboration_matrix"] = team_collaboration_matrix
     return state
 
-def collaboration_comprehensive_analysis_submodule(state: Module3State) -> Module3State:
+def collaboration_comprehensive_analysis_submodule(state: Module4State) -> Module4State:
     """
     협업 기여도 종합 분석 (현재는 팀장용만 처리하므로 패스)
     """
-    print("=== 모듈 3: 협업 기여도 종합 분석 (스킵) ===")
+    print("=== 모듈 4: 협업 기여도 종합 분석 (스킵) ===")
     
     return state
 
-def collaboration_formatter_submodule(state: Module3State) -> Module3State:
+def collaboration_formatter_submodule(state: Module4State) -> Module4State:
     """
     협업 매트릭스를 DB에 저장합니다.
     """
-    print("=== 모듈 3: 협업 매트릭스 DB 저장 시작 ===")
+    print("=== 모듈 4: 협업 매트릭스 DB 저장 시작 ===")
     
     team_collaboration_matrix = state["team_collaboration_matrix"]
     team_evaluation_id = state["team_evaluation_id"]
@@ -315,9 +301,9 @@ def collaboration_formatter_submodule(state: Module3State) -> Module3State:
     # DB에 저장
     if team_collaboration_matrix and team_evaluation_id:
         success = save_collaboration_matrix_to_db(team_evaluation_id, team_collaboration_matrix)
-        status_message = "모듈 3: 협업 매트릭스 DB 저장 완료" if success else "모듈 3: 협업 매트릭스 DB 저장 실패"
+        status_message = "모듈 4: 협업 매트릭스 DB 저장 완료" if success else "모듈 4: 협업 매트릭스 DB 저장 실패"
     else:
-        status_message = "모듈 3: 협업 매트릭스 DB 저장 실패 - 데이터 누락"
+        status_message = "모듈 4: 협업 매트릭스 DB 저장 실패 - 데이터 누락"
     
     # messages 필드 초기화 (LangGraph 호환성)
     if state["messages"] is None:
@@ -330,23 +316,23 @@ def collaboration_formatter_submodule(state: Module3State) -> Module3State:
 # 워크플로우 생성
 # ================================================================
 
-def create_module3_graph():
-    """모듈 3 그래프 생성 및 반환"""
-    module3_workflow = StateGraph(Module3State)
+def create_module4_graph():
+    """모듈 4 그래프 생성 및 반환"""
+    module4_workflow = StateGraph(Module4State)
     
     # 노드 추가 (State 키와 겹치지 않도록 이름 수정)
-    module3_workflow.add_node("data_collection", collaboration_data_collection_submodule)
-    module3_workflow.add_node("individual_analysis", individual_collaboration_analysis_submodule)
-    module3_workflow.add_node("team_network", team_collaboration_network_submodule)
-    module3_workflow.add_node("comprehensive_analysis", collaboration_comprehensive_analysis_submodule)
-    module3_workflow.add_node("formatter", collaboration_formatter_submodule)
+    module4_workflow.add_node("data_collection", collaboration_data_collection_submodule)
+    module4_workflow.add_node("individual_analysis", individual_collaboration_analysis_submodule)
+    module4_workflow.add_node("team_network", team_collaboration_network_submodule)
+    module4_workflow.add_node("comprehensive_analysis", collaboration_comprehensive_analysis_submodule)
+    module4_workflow.add_node("formatter", collaboration_formatter_submodule)
     
     # 엣지 정의
-    module3_workflow.add_edge(START, "data_collection")
-    module3_workflow.add_edge("data_collection", "individual_analysis")
-    module3_workflow.add_edge("individual_analysis", "team_network")
-    module3_workflow.add_edge("team_network", "comprehensive_analysis")
-    module3_workflow.add_edge("comprehensive_analysis", "formatter")
-    module3_workflow.add_edge("formatter", END)
+    module4_workflow.add_edge(START, "data_collection")
+    module4_workflow.add_edge("data_collection", "individual_analysis")
+    module4_workflow.add_edge("individual_analysis", "team_network")
+    module4_workflow.add_edge("team_network", "comprehensive_analysis")
+    module4_workflow.add_edge("comprehensive_analysis", "formatter")
+    module4_workflow.add_edge("formatter", END)
     
-    return module3_workflow.compile()
+    return module4_workflow.compile()

@@ -1,5 +1,5 @@
 # ================================================================
-# db_utils_module3.py - 모듈 3 데이터베이스 관련 유틸리티
+# db_utils_module4.py - 모듈 4 데이터베이스 관련 유틸리티
 # ================================================================
 
 import sys
@@ -11,6 +11,8 @@ from sqlalchemy.engine import Row
 from dotenv import load_dotenv
 
 load_dotenv()
+
+from config.settings import *
 
 # DB 설정
 current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -29,7 +31,7 @@ def row_to_dict(row: Row) -> Dict[str, Any]:
     return row._asdict()
 
 # ================================================================
-# 모듈 3 전용 DB 함수들
+# 모듈 4 전용 DB 함수들
 # ================================================================
 
 def fetch_collaboration_tasks_by_kpi(team_kpi_id: int, period_id: int) -> List[Dict]:
