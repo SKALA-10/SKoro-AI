@@ -2,7 +2,7 @@
 # agent.py - LangGraph 에이전트 및 상태 관리
 # ================================================================
 
-from typing import Annotated, List, Literal, TypedDict, Dict, Optional
+from typing import Annotated, List, Literal, TypedDict, Dict, Optional, Any
 import operator
 from langgraph.graph import StateGraph, START, END
 
@@ -22,8 +22,7 @@ from llm_utils import (
     call_llm_for_passionate_evaluation,
     call_llm_for_proactive_evaluation,
     call_llm_for_professional_evaluation,
-    call_llm_for_people_evaluation,
-    EVALUATION_CRITERIA_CACHE
+    call_llm_for_people_evaluation
 )
 
 
@@ -31,7 +30,7 @@ from llm_utils import (
 # State 정의
 # ================================================================
 
-class Module6AgentState(TypedDict, total=False):
+class Module6AgentState(TypedDict, total=True):
     """모듈 6 (4P BARS 평가) 상태 - 병렬 처리 완전 지원"""
 
     # ✅ 병렬 누적 필드
@@ -49,7 +48,7 @@ class Module6AgentState(TypedDict, total=False):
     # ✅ 병렬 업데이트 가능한 딕셔너리 필드들
     evaluation_criteria: Annotated[Dict[str, str], lambda x, y: {**x, **y}]
     evaluation_results: Annotated[Dict[str, Dict], lambda x, y: {**x, **y}]
-    integrated_data: Annotated[Dict[str, any], lambda x, y: {**x, **y}]
+    integrated_data: Annotated[Dict[str, Any], lambda x, y: {**x, **y}]
 
 
 # ================================================================
@@ -57,19 +56,21 @@ class Module6AgentState(TypedDict, total=False):
 # ================================================================
 
 def initialize_evaluation_criteria_agent(state: Module6AgentState) -> Dict:
-    """평가 기준 초기화 - 캐시 활용하여 raw와 parsed 모두 설정"""
+    """평가 기준 초기화 - 파일 캐시 활용하여 raw와 parsed 모두 설정"""
     
     try:
-        # 캐시 기반으로 평가 기준 로드
+        # 파일 캐시 기반으로 평가 기준 로드
         parsed_criteria = load_and_cache_evaluation_criteria()
         
-        # 캐시에서 raw_text도 가져오기
-        raw_text = EVALUATION_CRITERIA_CACHE.get("raw_text", "")
+        # 파일 캐시에서 raw_text도 가져오기
+        from llm_utils import load_cache_from_file
+        cache_data = load_cache_from_file()
+        raw_text = cache_data.get("raw_text", "")
         
         return {
             "raw_evaluation_criteria": raw_text,  # DB 원본 텍스트
             "evaluation_criteria": parsed_criteria,  # 파싱된 4P 딕셔너리
-            "messages": ["✅ 평가 기준 초기화 완료 (캐시 활용)"]
+            "messages": ["✅ 평가 기준 초기화 완료 (파일 캐시 활용)"]
         }
         
     except Exception as e:
@@ -180,12 +181,13 @@ def people_evaluation_submodule(state: Module6AgentState) -> Dict:
     emp_no = state["emp_no"]
     period_id = state["period_id"]
     team_id = state["team_id"]
+    report_type = state["report_type"]
     evaluation_criteria = state.get("evaluation_criteria", {})
 
     print(f"People 평가 시작: {emp_no}")
 
     basic_info = fetch_employee_basic_info(emp_no)
-    task_data = fetch_task_data_for_professional(emp_no, period_id, state["report_type"])
+    task_data = fetch_task_data_for_professional(emp_no, period_id, report_type)
     collaboration_data = fetch_collaboration_matrix_data(emp_no, team_id, period_id)
     peer_talk_data = fetch_peer_talk_data(emp_no, period_id)
 
@@ -237,8 +239,9 @@ def bars_integration_submodule(state: Module6AgentState) -> Dict:
         "people": people.get("score", 3.0),
     }
 
-    top_strength = max(score_dict, key=score_dict.get)
-    improvement_area = min(score_dict, key=score_dict.get)
+    # max/min 함수 오류 수정
+    top_strength = max(score_dict.items(), key=lambda x: x[1])[0]
+    improvement_area = min(score_dict.items(), key=lambda x: x[1])[0]
 
     # 4P 균형도 분석
     max_score = max(scores)
@@ -335,11 +338,11 @@ def annual_format_and_save_submodule(state: Module6AgentState) -> Dict:
 # ================================================================
 
 def create_module6_graph_efficient():
-    """효율적인 모듈 6 그래프 - 파싱 단계 없음"""
+    """효율적인 모듈 6 그래프 - 파일 캐시 활용"""
     module6 = StateGraph(Module6AgentState)
 
     # 노드 정의 (initialize만 있음, parse 제거)
-    module6.add_node("initialize_criteria", initialize_evaluation_criteria_agent)  # 👈 캐시 기반
+    module6.add_node("initialize_criteria", initialize_evaluation_criteria_agent)  # 👈 파일 캐시 기반
     module6.add_node("passionate_evaluation", passionate_evaluation_submodule)
     module6.add_node("proactive_evaluation", proactive_evaluation_submodule)
     module6.add_node("professional_evaluation", professional_evaluation_submodule)

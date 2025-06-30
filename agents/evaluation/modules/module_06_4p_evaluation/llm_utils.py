@@ -5,6 +5,7 @@
 import re
 import json
 import hashlib
+import os
 from typing import Dict, List
 from datetime import datetime
 from langchain_openai import ChatOpenAI
@@ -29,16 +30,56 @@ def _extract_json_from_llm_response(text: str) -> str:
 
 
 # ================================================================
-# 캐시 관리
+# 파일 기반 캐시 관리
 # ================================================================
 
-# 메모리 캐시 (애플리케이션 실행 중 유지)
-EVALUATION_CRITERIA_CACHE = {
-    "raw_text": None,
-    "raw_text_hash": None,
-    "parsed_criteria": None,
-    "last_updated": None
-}
+def get_cache_file_path() -> str:
+    """캐시 파일 경로 반환"""
+    current_dir = os.path.dirname(os.path.abspath(__file__))
+    project_root = os.path.abspath(os.path.join(current_dir, '../../../../'))
+    cache_dir = os.path.join(project_root, 'data', 'cache')
+    
+    # 캐시 디렉토리가 없으면 생성
+    os.makedirs(cache_dir, exist_ok=True)
+    
+    return os.path.join(cache_dir, 'evaluation_criteria_cache.json')
+
+
+def load_cache_from_file() -> Dict:
+    """파일에서 캐시 로드"""
+    cache_file = get_cache_file_path()
+    
+    if os.path.exists(cache_file):
+        try:
+            with open(cache_file, 'r', encoding='utf-8') as f:
+                cache_data = json.load(f)
+                print(f"✅ 파일 캐시 로드됨: {cache_file}")
+                return cache_data
+        except Exception as e:
+            print(f"⚠️ 캐시 파일 로드 실패: {e}")
+    
+    # 기본 캐시 구조 반환
+    return {
+        "raw_text": None,
+        "raw_text_hash": None,
+        "parsed_criteria": None,
+        "last_updated": None
+    }
+
+
+def save_cache_to_file(cache_data: Dict) -> bool:
+    """캐시를 파일에 저장"""
+    cache_file = get_cache_file_path()
+    
+    try:
+        with open(cache_file, 'w', encoding='utf-8') as f:
+            json.dump(cache_data, f, ensure_ascii=False, indent=2)
+        print(f"✅ 캐시 파일 저장됨: {cache_file}")
+        return True
+    except Exception as e:
+        print(f"❌ 캐시 파일 저장 실패: {e}")
+        return False
+
 
 def get_text_hash(text: str) -> str:
     """텍스트의 해시값 계산"""
@@ -83,7 +124,7 @@ def parse_criteria_with_llm(raw_text: str) -> Dict[str, str]:
     
     try:
         response = chain.invoke({})
-        content = response.content
+        content = str(response.content)  # 타입 안전성 확보
         match = re.search(r"```json\s*(.*?)```", content, re.DOTALL)
         extracted = match.group(1).strip() if match else content.strip()
         parsed = json.loads(extracted)
@@ -100,9 +141,12 @@ def parse_criteria_with_llm(raw_text: str) -> Dict[str, str]:
 
 
 def load_and_cache_evaluation_criteria() -> Dict[str, str]:
-    """수정된 캐시 기반 평가 기준 로더"""
+    """파일 기반 캐시를 사용하는 평가 기준 로더"""
     
-    # 1. DB에서 현재 평가 기준 텍스트 가져오기
+    # 1. 파일에서 캐시 로드
+    cache_data = load_cache_from_file()
+    
+    # 2. DB에서 현재 평가 기준 텍스트 가져오기
     try:
         current_raw_text = fetch_evaluation_criteria_from_db()
         current_hash = get_text_hash(current_raw_text)
@@ -113,30 +157,32 @@ def load_and_cache_evaluation_criteria() -> Dict[str, str]:
         print(f"❌ DB 조회 실패: {e}")
         raise e
     
-    # 2. 캐시된 데이터와 비교
-    cached_hash = EVALUATION_CRITERIA_CACHE.get("raw_text_hash")
-    cached_parsed = EVALUATION_CRITERIA_CACHE.get("parsed_criteria")
+    # 3. 캐시된 데이터와 비교
+    cached_hash = cache_data.get("raw_text_hash")
+    cached_parsed = cache_data.get("parsed_criteria")
     
     if cached_hash == current_hash and cached_parsed:
-        print("✅ 캐시된 평가 기준 사용 (DB 텍스트 변경 없음)")
+        print("✅ 파일 캐시된 평가 기준 사용 (DB 텍스트 변경 없음)")
         return cached_parsed
     
-    # 3. 캐시 미스 또는 텍스트 변경 - 새로 파싱
+    # 4. 캐시 미스 또는 텍스트 변경 - 새로 파싱
     print("🔄 평가 기준 새로 파싱 중...")
     
     try:
         # ✅ 수정: 독립 함수 호출
         parsed_criteria = parse_criteria_with_llm(current_raw_text)
         
-        # 4. 캐시 업데이트
-        EVALUATION_CRITERIA_CACHE.update({
+        # 5. 캐시 업데이트 및 파일 저장
+        updated_cache = {
             "raw_text": current_raw_text,
             "raw_text_hash": current_hash,
             "parsed_criteria": parsed_criteria,
             "last_updated": datetime.now().isoformat()
-        })
+        }
         
-        print("✅ 평가 기준 파싱 완료 및 캐시 업데이트")
+        save_cache_to_file(updated_cache)
+        
+        print("✅ 평가 기준 파싱 완료 및 파일 캐시 업데이트")
         return parsed_criteria
         
     except Exception as e:
@@ -212,7 +258,8 @@ def call_llm_for_passionate_evaluation(
 
     try:
         response = chain.invoke({})
-        json_output = _extract_json_from_llm_response(response.content)
+        content = str(response.content)  # 타입 안전성 확보
+        json_output = _extract_json_from_llm_response(content)
         result = json.loads(json_output)
 
         # 유효성 검증
@@ -306,7 +353,8 @@ def call_llm_for_proactive_evaluation(
 
     try:
         response = chain.invoke({})
-        json_output = _extract_json_from_llm_response(response.content)
+        content = str(response.content)  # 타입 안전성 확보
+        json_output = _extract_json_from_llm_response(content)
         result = json.loads(json_output)
 
         if not isinstance(result.get("score"), (int, float)) or not (
@@ -400,7 +448,8 @@ def call_llm_for_professional_evaluation(
 
     try:
         response = chain.invoke({})
-        json_output = _extract_json_from_llm_response(response.content)
+        content = str(response.content)  # 타입 안전성 확보
+        json_output = _extract_json_from_llm_response(content)
         result = json.loads(json_output)
 
         if not isinstance(result.get("score"), (int, float)) or not (
@@ -526,7 +575,8 @@ def call_llm_for_people_evaluation(
 
     try:
         response = chain.invoke({})
-        json_output = _extract_json_from_llm_response(response.content)
+        content = str(response.content)  # 타입 안전성 확보
+        json_output = _extract_json_from_llm_response(content)
         result = json.loads(json_output)
 
         if not isinstance(result.get("score"), (int, float)) or not (
