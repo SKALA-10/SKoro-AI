@@ -6,6 +6,7 @@ import statistics
 from typing import Dict, List
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
+from agents.evaluation.modules.module_08_team_comparision.comparison_utils import *
 
 # ================================================================
 # KPI 비교 분석 함수들

@@ -6,7 +6,7 @@ import logging
 from typing import Dict, Any
 from datetime import datetime
 
-from agent import Module8AgentState, create_module8_graph
+from agents.evaluation.modules.module_08_team_comparision.agent import *
 
 # 로깅 설정
 logging.basicConfig(level=logging.INFO)

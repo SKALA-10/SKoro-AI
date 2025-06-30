@@ -8,35 +8,13 @@ from typing import Dict, List, Optional, Any, Literal, TypedDict
 from langchain_core.messages import HumanMessage
 from langgraph.graph import StateGraph, START, END
 
-from db_utils import (
-    fetch_team_kpis_data,
-    fetch_multiple_teams_kpis,
-    fetch_team_evaluation_id,
-    save_team_comparison_results
-)
-
-from comparison_utils import (
-    compare_kpis_with_similar_teams,
-    get_comparison_result_detailed
-)
-
-from llm_utils import (
-    call_llm_for_team_performance_comment
-)
-
-# 팀 성과 비교 분석기 임포트
+from agents.evaluation.modules.module_08_team_comparision.db_utils import *
+from agents.evaluation.modules.module_08_team_comparision.comparison_utils import *
+from agents.evaluation.modules.module_08_team_comparision.llm_utils import *
 from shared.team_performance_comparator import TeamPerformanceComparator
 
 # 로깅 설정
 logger = logging.getLogger(__name__)
-
-# 캐시 디렉토리 설정
-current_file_dir = os.path.dirname(os.path.abspath(__file__))
-ROOT_DIR = os.path.abspath(os.path.join(current_file_dir, '../../../../'))
-CACHE_DIR = os.path.join(ROOT_DIR, 'data', 'cache')
-
-# 캐시 디렉토리 생성 (없으면)
-os.makedirs(CACHE_DIR, exist_ok=True)
 
 # ================================================================
 # 상태 정의
@@ -83,7 +61,7 @@ def check_cluster_stats_submodule(state: Module8AgentState) -> Module8AgentState
     period_id = state["period_id"]
     
     # TeamPerformanceComparator 인스턴스 생성
-    comparator = TeamPerformanceComparator(cache_dir=CACHE_DIR)
+    comparator = TeamPerformanceComparator()
     
     # 클러스터 통계 상태 확인
     status = comparator.get_cluster_status(period_id)
@@ -108,7 +86,7 @@ def calculate_cluster_stats_submodule(state: Module8AgentState) -> Module8AgentS
     logger.info(f"🔄 클러스터 분석 시작 - 팀 {team_id}")
     
     # TeamPerformanceComparator로 클러스터 분석 실행
-    comparator = TeamPerformanceComparator(cache_dir=CACHE_DIR)
+    comparator = TeamPerformanceComparator()
     result_data = comparator.analyze_team_cluster_performance(team_id, period_id)
     
     if not result_data["success"]:

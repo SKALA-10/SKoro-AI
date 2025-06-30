@@ -9,6 +9,7 @@ from typing import Dict, List, Optional, Any
 from sqlalchemy import create_engine, text
 from sqlalchemy.engine import Row
 from dotenv import load_dotenv
+from config.settings import *
 
 load_dotenv()
 
