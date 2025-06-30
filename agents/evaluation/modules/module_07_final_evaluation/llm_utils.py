@@ -9,14 +9,10 @@ from langchain_openai import ChatOpenAI
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.messages import SystemMessage, HumanMessage, AIMessage
 from dotenv import load_dotenv
-import sys
-import os
-
-current_dir = os.path.dirname(os.path.abspath(__file__))
-project_root = os.path.abspath(os.path.join(current_dir, '../../../../'))
-sys.path.append(project_root)
 
 load_dotenv()
+
+from agents.evaluation.modules.module_07_final_evaluation.db_utils import *
 
 # LLM 클라이언트 설정
 llm_client = ChatOpenAI(model="gpt-4o-mini", temperature=0)
@@ -135,9 +131,9 @@ def call_llm_for_normalized_evaluation_comments(
     chain = prompt | llm_client
 
     try:
-        response: AIMessage = chain.invoke({})
+        response = chain.invoke({})
         json_output_raw = response.content
-        json_output = _extract_json_from_llm_response(json_output_raw)
+        json_output = _extract_json_from_llm_response(str(json_output_raw))
         llm_parsed_data = json.loads(json_output)
         
         ai_reason = llm_parsed_data.get("ai_reason", "")

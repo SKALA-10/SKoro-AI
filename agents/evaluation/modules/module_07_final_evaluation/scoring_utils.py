@@ -1,10 +1,3 @@
-import sys
-import os
-
-current_dir = os.path.dirname(os.path.abspath(__file__))
-project_root = os.path.abspath(os.path.join(current_dir, '../../../../'))
-sys.path.append(project_root)
-
 # ================================================================
 # scoring_utils_module7.py - 모듈 7 점수 계산 관련 유틸리티
 # ================================================================
