@@ -47,7 +47,6 @@ def initialize_evaluation_criteria_agent(state: Module6AgentState) -> Dict:
         parsed_criteria = load_and_cache_evaluation_criteria()
         
         # 파일 캐시에서 raw_text도 가져오기
-        from llm_utils import load_cache_from_file
         cache_data = load_cache_from_file()
         raw_text = cache_data.get("raw_text", "")
         
