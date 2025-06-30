@@ -272,9 +272,14 @@ def bars_integration_submodule(state: Module6AgentState) -> Dict:
 
 
 def quarterly_format_and_save_submodule(state: Module6AgentState) -> Dict:
-    """분기 저장 서브모듈 - 수정됨"""
-    
+    """
+    분기 저장 서브모듈 - 수정
+    """
     feedback_report_id = state.get("feedback_report_id")
+    if not feedback_report_id:
+        # team_id, period_id, emp_no로 DB에서 조회
+        from .db_utils import fetch_feedback_report_id
+        feedback_report_id = fetch_feedback_report_id(state["team_id"], state["period_id"], state["emp_no"])
     integrated_result = state.get("integrated_data", {}).get("integrated_4p_result", {})
 
     print(f"분기 결과 저장 시작: feedback_report_id={feedback_report_id}")

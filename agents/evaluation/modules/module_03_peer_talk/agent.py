@@ -227,25 +227,26 @@ def feedback_generation_submodule(state: Module3AgentState) -> Dict:
 
 # 5. DB 저장 서브모듈
 def database_storage_submodule(state: Module3AgentState) -> Dict:
-    """분기별 DB 저장 (feedback_reports 또는 final_evaluation_reports)"""
+    """
+    분기별 DB 저장 (feedback_reports 또는 final_evaluation_reports)
+    """
     messages = state.get("messages", []) + [HumanMessage(content="모듈 3: DB 저장 시작")]
-    
     try:
         period_id = state["period_id"]
         target_emp_no = state["target_emp_no"]
-        
+        # feedback_report_id가 없으면 team_id, period_id로 조회
+        feedback_report_id = state.get("feedback_report_id")
+        if not feedback_report_id and "team_id" in state:
+            from .db_utils import fetch_feedback_report_id
+            feedback_report_id = fetch_feedback_report_id(state["team_id"], period_id, target_emp_no)
         # 피드백 결과 포맷팅
         peer_talk_summary = format_peer_evaluation_result(
             state.get("strengths", []),
             state.get("concerns", []),
             state.get("collaboration_observations", [])
         )
-        
-        # 분기별 저장
         if period_id == 4:
-            # final_evaluation_reports 테이블
             report_id = save_final_evaluation_peer_summary(target_emp_no, period_id, peer_talk_summary)
-            
             if report_id:
                 messages = messages + [HumanMessage(content=f"모듈 3: final_evaluation_reports 저장 완료 (ID: {report_id})")]
                 return {"messages": messages, "final_evaluation_report_id": report_id}
@@ -253,16 +254,13 @@ def database_storage_submodule(state: Module3AgentState) -> Dict:
                 messages = messages + [HumanMessage(content="모듈 3: final_evaluation_reports 저장 실패")]
                 return {"messages": messages}
         else:
-            # feedback_reports 테이블
             report_id = save_feedback_peer_summary(target_emp_no, period_id, peer_talk_summary)
-            
             if report_id:
                 messages = messages + [HumanMessage(content=f"모듈 3: feedback_reports 저장 완료 (ID: {report_id})")]
                 return {"messages": messages, "feedback_report_id": report_id}
             else:
                 messages = messages + [HumanMessage(content="모듈 3: feedback_reports 저장 실패")]
                 return {"messages": messages}
-        
     except Exception as e:
         messages = messages + [HumanMessage(content=f"모듈 3: DB 저장 실패 - {str(e)}")]
         return {"messages": messages}

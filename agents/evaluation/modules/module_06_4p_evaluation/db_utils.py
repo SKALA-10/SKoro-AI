@@ -176,6 +176,26 @@ def fetch_evaluation_criteria_from_db(prompt_type: str = "4p_evaluation") -> str
             raise ValueError(f"DB에서 {prompt_type} 평가 기준을 찾을 수 없습니다.")
 
 
+def fetch_feedback_report_id(team_id: int, period_id: int, emp_no: str) -> Optional[int]:
+    """
+    team_id, period_id, emp_no로 feedback_report_id를 조회
+    """
+    from agents.evaluation.modules.module_02_goal_achievement.db_utils import fetch_team_evaluation_id
+    team_evaluation_id = fetch_team_evaluation_id(team_id, period_id)
+    if not team_evaluation_id:
+        return None
+    with engine.connect() as connection:
+        query = text("""
+            SELECT feedback_report_id FROM feedback_reports
+            WHERE team_evaluation_id = :team_evaluation_id AND emp_no = :emp_no
+        """)
+        result = connection.execute(query, {
+            "team_evaluation_id": team_evaluation_id,
+            "emp_no": emp_no
+        })
+        return result.scalar_one_or_none()
+
+
 # ================================================================
 # DB 저장 함수들
 # ================================================================

@@ -380,6 +380,8 @@ def generate_task_comments_unified(state: Module2State):
 
 def generate_individual_summary_comments_unified(state: Module2State):
     """개인 종합 코멘트 생성 (통합 시스템)"""
+    if 'feedback_report_ids' not in state or state['feedback_report_ids'] is None:
+        state['feedback_report_ids'] = []
     team_members = fetch_team_members(state['team_id'])
     period_type = "annual" if state['report_type'] == "annual" else "quarterly"
     
@@ -426,6 +428,8 @@ def generate_individual_summary_comments_unified(state: Module2State):
 
 def generate_team_overall_comment_unified(state: Module2State):
     """팀 전체 분석 코멘트 생성 (통합 시스템)"""
+    if 'final_evaluation_report_ids' not in state or state['final_evaluation_report_ids'] is None:
+        state['final_evaluation_report_ids'] = []
     # 팀 KPI 데이터 수집
     team_kpis_data = []
     for kpi_id in state['target_team_kpi_ids']:
@@ -453,7 +457,6 @@ def db_update_submodule(state: Module2State) -> Module2State:
     print(f"   💾 최종 DB 업데이트 중...")
     
     try:
-        from db_utils import engine
         with engine.begin() as transaction:
             # 이미 각 서브모듈에서 업데이트했으므로 최종 검증만 수행
             
@@ -679,7 +682,6 @@ def validate_final_update_results(state: Module2State) -> Dict[str, Any]:
         
         # 3. Team evaluation 검증
         if state['team_evaluation_id']:
-            from db_utils import engine
             with engine.connect() as connection:
                 query_text = """
                     SELECT average_achievement_rate, ai_team_overall_analysis_comment,
@@ -691,7 +693,6 @@ def validate_final_update_results(state: Module2State) -> Dict[str, Any]:
                 query = text(query_text)
                 result = connection.execute(query, {"team_evaluation_id": state['team_evaluation_id']})
                 row = result.fetchone()
-                from db_utils import row_to_dict
                 team_eval = row_to_dict(row) if row else {}
                 
                 if team_eval.get('average_achievement_rate') is None:
@@ -760,7 +761,6 @@ def validate_team_ranking_data(state: Module2State) -> Dict[str, Any]:
     warnings = []
     
     try:
-        from db_utils import engine
         from sqlalchemy import text
         with engine.connect() as connection:
             # feedback_reports에서 순위 데이터 조회
@@ -771,7 +771,6 @@ def validate_team_ranking_data(state: Module2State) -> Dict[str, Any]:
                 ORDER BY ranking
             """)
             results = connection.execute(query, {"team_evaluation_id": state['team_evaluation_id']})
-            from db_utils import row_to_dict
             ranking_data = [row_to_dict(row) for row in results]
             
             if not ranking_data:
@@ -863,7 +862,6 @@ def validate_data_consistency(state: Module2State) -> List[str]:
         
         # 3. 팀 평균 달성률과 개별 달성률 일관성 검증
         if state['team_evaluation_id']:
-            from db_utils import engine
             from sqlalchemy import text
             with engine.connect() as connection:
                 query = text("""

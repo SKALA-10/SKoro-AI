@@ -165,6 +165,26 @@ def get_team_evaluation_id_by_emp_and_period(emp_no: str, period_id: int) -> Opt
         return row_to_dict(result)["team_evaluation_id"] if result else None
 
 
+def fetch_feedback_report_id(team_id: int, period_id: int, emp_no: str) -> Optional[int]:
+    """
+    team_id, period_id, emp_no로 feedback_report_id를 조회
+    """
+    from agents.evaluation.modules.module_02_goal_achievement.db_utils import fetch_team_evaluation_id
+    team_evaluation_id = fetch_team_evaluation_id(team_id, period_id)
+    if not team_evaluation_id:
+        return None
+    with engine.connect() as connection:
+        query = text("""
+            SELECT feedback_report_id FROM feedback_reports
+            WHERE team_evaluation_id = :team_evaluation_id AND emp_no = :emp_no
+        """)
+        result = connection.execute(query, {
+            "team_evaluation_id": team_evaluation_id,
+            "emp_no": emp_no
+        })
+        return result.scalar_one_or_none()
+
+
 # --- 모듈 3 전용 DB 저장 함수들 ---
 
 def format_peer_evaluation_result(strengths: List[str], concerns: List[str], collaboration_observations: List[str]) -> str:
