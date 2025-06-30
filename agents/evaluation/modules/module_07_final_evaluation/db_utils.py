@@ -119,7 +119,7 @@ def fetch_team_quarterly_data(team_id: str, period_id: int) -> Dict:
         
         return quarterly_data
 
-def batch_update_temp_evaluations(score_data: List[Dict]) -> Dict:
+def batch_update_temp_evaluations(score_data: List[Dict], period_id: int = 4) -> Dict:
     """팀 전체 temp_evaluations 배치 업데이트 (raw_score, score 모두 저장)"""
     success_count = 0
     failed_members = []
@@ -128,6 +128,24 @@ def batch_update_temp_evaluations(score_data: List[Dict]) -> Dict:
         try:
             for data in score_data:
                 try:
+                    # team_evaluation_id 조회
+                    team_eval_query = text("""
+                        SELECT te.team_evaluation_id
+                        FROM team_evaluations te
+                        JOIN employees e ON e.team_id = te.team_id
+                        WHERE e.emp_no = :emp_no AND te.period_id = :period_id
+                    """)
+                    
+                    team_eval_result = connection.execute(team_eval_query, {
+                        "emp_no": data["emp_no"],
+                        "period_id": period_id
+                    }).scalar_one_or_none()
+                    
+                    if not team_eval_result:
+                        failed_members.append(data["emp_no"])
+                        print(f"DB 업데이트 실패: {data['emp_no']} (team_evaluation_id 없음)")
+                        continue
+
                     raw_score_val = data["raw_score"]
                     try:
                         # raw_score가 json 문자열일 경우 dict로 파싱, 아니면 그대로 사용
@@ -142,11 +160,12 @@ def batch_update_temp_evaluations(score_data: List[Dict]) -> Dict:
                             raw_score = :raw_score,
                             score = :score,
                             comment = :comment
-                        WHERE emp_no = :emp_no
+                        WHERE emp_no = :emp_no AND team_evaluation_id = :team_evaluation_id
                     """)
                     
                     result = connection.execute(query, {
                         "emp_no": data["emp_no"],
+                        "team_evaluation_id": team_eval_result,
                         "ai_reason": data["ai_reason"],
                         "raw_score": raw_score_val,  # JSON 문자열 저장
                         "score": data["score"],  # 정규화된 점수 저장

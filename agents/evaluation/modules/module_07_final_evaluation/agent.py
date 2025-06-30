@@ -328,11 +328,12 @@ def team_batch_storage_submodule(state: TeamModule7AgentState) -> TeamModule7Age
     
     try:
         evaluation_comments = state["evaluation_comments"]
+        period_id = state["period_id"]
         
         print("💾 배치 저장 시작...")
         
         # 배치 업데이트 실행
-        update_result = batch_update_temp_evaluations(evaluation_comments)
+        update_result = batch_update_temp_evaluations(evaluation_comments, period_id)
         
         updated_state = state.copy()
         updated_state.update({
