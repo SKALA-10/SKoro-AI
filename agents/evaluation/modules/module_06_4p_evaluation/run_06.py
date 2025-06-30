@@ -1,4 +1,4 @@
-from agent import create_module6_graph_efficient
+from agents.evaluation.modules.module_06_4p_evaluation.agent import *
 import time
 
 # 

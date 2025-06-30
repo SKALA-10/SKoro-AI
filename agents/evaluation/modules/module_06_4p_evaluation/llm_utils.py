@@ -11,7 +11,8 @@ from datetime import datetime
 from langchain_openai import ChatOpenAI
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.messages import SystemMessage, HumanMessage
-from db_utils import fetch_evaluation_criteria_from_db
+from agents.evaluation.modules.module_06_4p_evaluation.db_utils import *
+from config.settings import *
 
 # ================================================================
 # LLM 클라이언트 설정
