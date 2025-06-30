@@ -8,14 +8,8 @@ from datetime import datetime
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Any, Union, TypedDict
 
-from db_utils import Module11DataAccess, DatabaseError, Module11Error
-from llm_utils import (
-    init_llm_client, parse_json_field, extract_json_from_llm_response,
-    validate_risk_json_structure, validate_plan_json_structure,
-    create_fallback_risk_analysis, create_fallback_annual_plan,
-    create_fallback_annual_comment_text, create_fallback_quarterly_comment_text,
-    get_year_from_period
-)
+from agents.evaluation.modules.module_11_team_coaching.db_utils import Module11DataAccess, DatabaseError, Module11Error
+from agents.evaluation.modules.module_11_team_coaching.llm_utils import *
 
 # 로깅 설정
 logger = logging.getLogger(__name__)

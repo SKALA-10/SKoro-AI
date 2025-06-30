@@ -1,18 +1,11 @@
 # llm_utils.py
 #  LLM 처리 및 JSON 파싱 유틸리티
-import sys
-import os
-import json
-import re
 import logging
 from typing import Optional, Dict, Any, List
 from langchain_openai import ChatOpenAI
+import json
+import re
 
-
-# 프로젝트 루트 경로 추가
-current_dir = os.path.dirname(os.path.abspath(__file__))
-project_root = os.path.abspath(os.path.join(current_dir, '../../../../'))
-sys.path.append(project_root)
 
 # 로깅 설정
 logger = logging.getLogger(__name__)
