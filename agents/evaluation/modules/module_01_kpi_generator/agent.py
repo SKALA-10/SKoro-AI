@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import HTTPException
 from pydantic import BaseModel, Field, ConfigDict
 from typing import List, Dict, Optional, Any, Literal
 from datetime import date
@@ -11,7 +11,6 @@ from langchain_core.prompts import ChatPromptTemplate
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from agents.evaluation.modules.module_01_kpi_generator.models import Task, Grade, TeamKpi, Employee
-from db_utils import AsyncSessionLocal
 import re
 from collections import defaultdict
 
