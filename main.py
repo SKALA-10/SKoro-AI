@@ -1,7 +1,7 @@
 from fastapi import FastAPI, APIRouter
 from fastapi.middleware.cors import CORSMiddleware
-from routers import feedback_report_router, final_evaluation_report_router, team_evaluation_router, evaluation_feedback_router, chat_router
-
+from routers import feedback_report_router, final_evaluation_report_router, team_evaluation_router, \
+    evaluation_feedback_router, chat_router, kpi_generator_router
 
 app = FastAPI(
     title="SKoro-AI API",
@@ -28,6 +28,7 @@ api_router.include_router(final_evaluation_report_router.router)
 api_router.include_router(team_evaluation_router.router, prefix="/team-evaluation")
 api_router.include_router(evaluation_feedback_router.router, prefix="/evaluation-feedback")
 api_router.include_router(chat_router.router, prefix="/chat")
+api_router.include_router(kpi_generator_router.router, prefix="/kpi")
 
 app.include_router(api_router, prefix="/api/ai")
 
