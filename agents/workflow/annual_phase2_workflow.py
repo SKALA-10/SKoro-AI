@@ -102,6 +102,9 @@ def run_phase4_all_modules(period_id: int, teams):
         def module10_func(team_id, period_id):
             members = fetch_team_members(team_id)
             for member in members:
+                # 팀장 제외
+                if member.get('role') == 'MANAGER':
+                    continue
                 emp_no = member["emp_no"]
                 module10_graph = create_module10_graph()
                 state10 = {

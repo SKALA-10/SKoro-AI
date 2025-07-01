@@ -178,6 +178,9 @@ def run_phase3_all_modules(period_id: int, teams):
         try:
             members = fetch_team_members(team_id)
             for member in members:
+                # 팀장 제외
+                if member.get('role') == 'MANAGER':
+                    continue
                 emp_no = member["emp_no"]
                 logging.info(f"[Phase3][모듈10] 팀 {team_id} - {emp_no} 실행 시작")
                 module10_graph = create_module10_graph()

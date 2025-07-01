@@ -82,9 +82,9 @@ def run_team_module10_evaluation(team_id: str, period_id: int, report_type: str 
     
     print(f"🚀 팀 단위 모듈 10 실행: {team_id} ({report_type})")
     
-    # 팀원 목록 조회
+    # 팀원 목록 조회 (팀장 제외)
     with engine.connect() as connection:
-        query = text("SELECT emp_no, emp_name FROM employees WHERE team_id = :team_id")
+        query = text("SELECT emp_no, emp_name FROM employees WHERE team_id = :team_id AND role != 'MANAGER'")
         results = connection.execute(query, {"team_id": team_id}).fetchall()
         team_members = [{"emp_no": row[0], "emp_name": row[1]} for row in results]
     
