@@ -65,6 +65,8 @@ def fetch_quarterly_performance(engine: Engine, emp_no: str) -> List[Dict]:
         {"분기": "3분기", "달성률": 0, "실적_요약": ""},
         {"분기": "4분기", "달성률": 0, "실적_요약": ""}
     ]
+    
+    # 1-3분기 데이터는 feedback_reports에서 가져오기
     query = text("""
         SELECT fr.ai_achievement_rate as achievement_rate,
                fr.ai_overall_contribution_summary_comment as performance_summary, 
@@ -86,28 +88,57 @@ def fetch_quarterly_performance(engine: Engine, emp_no: str) -> List[Dict]:
             quarter_index = 1
         elif "3분기" in period_name:
             quarter_index = 2
-        elif "4분기" in period_name:
-            quarter_index = 3
         if quarter_index is not None:
             base_quarters[quarter_index] = {
                 "분기": f"{quarter_index + 1}분기",
                 "달성률": result.achievement_rate or 0,
                 "실적_요약": result.performance_summary or ""
             }
+    
+    # 4분기 데이터는 final_evaluation_reports에서 가져오기
+    final_query = text("""
+        SELECT ai_annual_achievement_rate as achievement_rate,
+               ai_annual_performance_summary_comment as performance_summary
+        FROM final_evaluation_reports
+        WHERE emp_no = :emp_no
+        LIMIT 1
+    """)
+    with engine.connect() as conn:
+        final_result = conn.execute(final_query, {"emp_no": emp_no}).first()
+        if final_result:
+            base_quarters[3] = {
+                "분기": "4분기",
+                "달성률": final_result.achievement_rate or 0,
+                "실적_요약": final_result.performance_summary or ""
+            }
+    
     print(f"   - {emp_no}님의 분기별 성과 데이터 처리 완료")
     return base_quarters
 
 def fetch_tasks_for_final_report(engine: Engine, emp_no: str, team_evaluation_id: int) -> List[Row]:
+    # 연말 평가용 Task 데이터만 가져오기 (최종 상태)
     query = text("""
-        SELECT tk.task_name, ts.task_performance, ts.ai_achievement_rate, ts.ai_analysis_comment_task
+        SELECT DISTINCT tk.task_name, ts.task_performance, ts.ai_achievement_rate, ts.ai_analysis_comment_task
         FROM tasks tk
         JOIN task_summaries ts ON tk.task_id = ts.task_id
-        WHERE tk.emp_no = :emp_no AND tk.team_kpi_id IS NOT NULL
+        WHERE tk.emp_no = :emp_no 
+        AND tk.team_kpi_id IS NOT NULL
+        AND ts.ai_achievement_rate IS NOT NULL
+        ORDER BY tk.task_name, ts.ai_achievement_rate DESC
     """)
     with engine.connect() as connection:
         results = connection.execute(query, {"emp_no": emp_no}).fetchall()
-    print(f"   - {emp_no}님의 Task 데이터 {len(results)}건 조회 완료")
-    return list(results)
+    
+    # Task별로 최고 달성률 데이터만 선택 (연말 최종 상태)
+    task_dict = {}
+    for result in results:
+        task_name = result.task_name
+        if task_name not in task_dict or (result.ai_achievement_rate or 0) > (task_dict[task_name].ai_achievement_rate or 0):
+            task_dict[task_name] = result
+    
+    final_results = list(task_dict.values())
+    print(f"   - {emp_no}님의 연말 Task 데이터 {len(final_results)}건 조회 완료")
+    return final_results
 
 # --- 3. JSON 리포트 생성 함수 ---
 class DecimalEncoder(json.JSONEncoder):
