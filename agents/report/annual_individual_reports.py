@@ -60,16 +60,17 @@ def fetch_temp_evaluation_data(engine: Engine, emp_no: str) -> Optional[Row]:
 
 def fetch_quarterly_performance(engine: Engine, emp_no: str) -> List[Dict]:
     base_quarters = [
-        {"분기": "1분기", "달성률": 0, "실적_요약": ""},
-        {"분기": "2분기", "달성률": 0, "실적_요약": ""},
-        {"분기": "3분기", "달성률": 0, "실적_요약": ""},
-        {"분기": "4분기", "달성률": 0, "실적_요약": ""}
+        {"분기": "1분기", "순위": 0, "달성률": 0, "실적_요약": ""},
+        {"분기": "2분기", "순위": 0, "달성률": 0, "실적_요약": ""},
+        {"분기": "3분기", "순위": 0, "달성률": 0, "실적_요약": ""},
+        {"분기": "4분기", "순위": 0, "달성률": 0, "실적_요약": ""}
     ]
     
     # 1-3분기 데이터는 feedback_reports에서 가져오기
     query = text("""
         SELECT fr.ai_achievement_rate as achievement_rate,
-               fr.ai_overall_contribution_summary_comment as performance_summary, 
+               fr.ai_overall_contribution_summary_comment as performance_summary,
+               fr.ranking,
                p.period_name, p.order_in_year
         FROM feedback_reports fr
         JOIN team_evaluations te ON fr.team_evaluation_id = te.team_evaluation_id
@@ -91,6 +92,7 @@ def fetch_quarterly_performance(engine: Engine, emp_no: str) -> List[Dict]:
         if quarter_index is not None:
             base_quarters[quarter_index] = {
                 "분기": f"{quarter_index + 1}분기",
+                "순위": result.ranking or 0,
                 "달성률": result.achievement_rate or 0,
                 "실적_요약": result.performance_summary or ""
             }
@@ -98,7 +100,8 @@ def fetch_quarterly_performance(engine: Engine, emp_no: str) -> List[Dict]:
     # 4분기 데이터는 final_evaluation_reports에서 가져오기
     final_query = text("""
         SELECT ai_annual_achievement_rate as achievement_rate,
-               ai_annual_performance_summary_comment as performance_summary
+               ai_annual_performance_summary_comment as performance_summary,
+               ranking
         FROM final_evaluation_reports
         WHERE emp_no = :emp_no
         LIMIT 1
@@ -108,6 +111,7 @@ def fetch_quarterly_performance(engine: Engine, emp_no: str) -> List[Dict]:
         if final_result:
             base_quarters[3] = {
                 "분기": "4분기",
+                "순위": final_result.ranking or 0,
                 "달성률": final_result.achievement_rate or 0,
                 "실적_요약": final_result.performance_summary or ""
             }
