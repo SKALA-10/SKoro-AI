@@ -105,7 +105,7 @@ def fetch_team_members_feedback(engine: Engine, team_id: int, period_id: int) ->
         query = text("""
             SELECT 
                 fr.ranking, fr.ai_achievement_rate, e.emp_name,
-                fr.ai_overall_contribution_summary_comment
+                fr.ai_overall_contribution_summary_comment, fr.contribution_rate
             FROM feedback_reports fr
             JOIN employees e ON fr.emp_no = e.emp_no
             JOIN team_evaluations te ON fr.team_evaluation_id = te.team_evaluation_id
@@ -282,13 +282,14 @@ def generate_korean_team_evaluation_report(
             "팀원별_기여도": [
                 {
                     "순위": member.ranking or 'N/A',
-                    "달성률": safe_convert_to_serializable(member.ai_achievement_rate),
                     "이름": member.emp_name or "",
+                    "달성률": safe_convert_to_serializable(member.ai_achievement_rate),
+                    "누적_기여도": safe_convert_to_serializable(member.contribution_rate),
                     "기여_내용": member.ai_overall_contribution_summary_comment or ""
                 } for member in 팀원피드백데이터
             ],
             # "종합_평가": "팀원들의 전반적인 성과 기여도와 달성률을 기준으로 한 종합 분석입니다.",
-            "기여도_기준": "개인별 업무 달성률을 종합하여 평가하였습니다."
+            "기여도_기준": "개인별 업무 달성률과 누적 기여도를 종합하여 평가하였습니다."
         },
         "협업_네트워크": {
             "협업_매트릭스": 협업_네트워크_상세, # 상세 매핑된 리스트 사용
