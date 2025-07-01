@@ -1,14 +1,15 @@
 import os
 import json
 import time
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, List, Optional, Sequence
 from decimal import Decimal
 
 from sqlalchemy import create_engine, text
 from sqlalchemy.engine.base import Engine
 from sqlalchemy.engine.row import Row
 from sqlalchemy.exc import ProgrammingError
-from dotenv import load_dotenv
+
+from config.settings import DatabaseConfig
 
 print("✅ 팀 평가 리포트 생성기 - 기본 라이브러리 임포트 완료")
 
@@ -16,18 +17,10 @@ print("✅ 팀 평가 리포트 생성기 - 기본 라이브러리 임포트 완
 
 def get_db_engine() -> Engine:
     """
-    .env 파일에서 데이터베이스 연결 정보를 로드하여 SQLAlchemy 엔진을 생성합니다.
+    config.settings의 DatabaseConfig를 사용하여 SQLAlchemy 엔진을 생성합니다.
     """
-    load_dotenv()
-    db_user = os.getenv("DB_USERNAME")
-    db_password = os.getenv("DB_PASSWORD")
-    db_host = os.getenv("DB_HOST")
-    db_port = os.getenv("DB_PORT")
-    db_name = os.getenv("DB_NAME")
-    if not all([db_user, db_password, db_host, db_port, db_name]):
-        raise ValueError("데이터베이스 연결 정보가 .env 파일에 올바르게 설정되지 않았습니다.")
-    dsn = f"mysql+pymysql://{db_user}:{db_password}@{db_host}:{db_port}/{db_name}?charset=utf8mb4"
-    engine = create_engine(dsn)
+    db_config = DatabaseConfig()
+    engine = create_engine(db_config.DATABASE_URL, pool_pre_ping=True)
     print("✅ 데이터베이스 엔진 생성 완료")
     return engine
 
@@ -99,7 +92,7 @@ def fetch_team_kpis(engine: Engine, team_id: int) -> List[Row]:
         with engine.connect() as connection:
             results = connection.execute(query, {"team_id": team_id}).fetchall()
         print(f"   - 팀 KPI 데이터 {len(results)}건 조회 완료")
-        return results
+        return list(results)
     except Exception as e:
         print(f"   - ❌ 팀 KPI 데이터 조회 중 오류 발생: {e}")
         return []
@@ -122,7 +115,7 @@ def fetch_team_members_feedback(engine: Engine, team_id: int, period_id: int) ->
         with engine.connect() as connection:
             results = connection.execute(query, {"team_id": team_id, "period_id": period_id}).fetchall()
         print(f"   - 팀원 피드백 데이터 {len(results)}건 조회 완료 (ranking 컬럼 기준 정렬)")
-        return results
+        return list(results)
     except Exception as e:
         print(f"   - ❌ 팀원 피드백 데이터 조회 중 오류 발생: {e}")
         return []
@@ -170,7 +163,7 @@ def generate_korean_team_evaluation_report(
     
     # 협업 매트릭스 데이터 처리
     # ai_collaboration_matrix가 직접 리스트 형태의 JSON으로 저장될 경우를 대비
-    협업매트릭스_리스트: List[Dict] = []
+    협업매트릭스_리스트: List[Dict[str, Any]] = []
     if isinstance(협업매트릭스데이터_raw, list): # ai_collaboration_matrix가 직접 리스트인 경우
         협업매트릭스_리스트 = 협업매트릭스데이터_raw
         협업팀_요약 = "" # team_summary는 보통 리스트를 감싸는 객체에 있음.
@@ -180,65 +173,71 @@ def generate_korean_team_evaluation_report(
     
     협업_네트워크_상세 = []
     for member_data in 협업매트릭스_리스트:
-        협업_네트워크_상세.append({
-            "이름": member_data.get("name", ""),
-            "총 Task 수": safe_convert_to_serializable(member_data.get("total_tasks", 0)),
-            "협업률": f"{safe_convert_to_serializable(member_data.get('collaboration_rate', 0))}%",
-            "핵심 협업자": member_data.get("key_collaborators", []),
-            "팀 내 역할": member_data.get("team_role", ""),
-            "Peer Talk 평가": member_data.get("peer_talk_summary", ""),
-            "협업 편중도": f"{safe_convert_to_serializable(member_data.get('collaboration_bias', 0))}%",
-            "종합 평가": member_data.get("overall_evaluation", "")
-        })
+        if isinstance(member_data, dict):
+            협업_네트워크_상세.append({
+                "이름": member_data.get("name", ""),
+                "총 Task 수": safe_convert_to_serializable(member_data.get("total_tasks", 0)),
+                "협업률": f"{safe_convert_to_serializable(member_data.get('collaboration_rate', 0))}%",
+                "핵심 협업자": member_data.get("key_collaborators", []),
+                "팀 내 역할": member_data.get("team_role", ""),
+                "Peer Talk 평가": member_data.get("peer_talk_summary", ""),
+                "협업 편중도": f"{safe_convert_to_serializable(member_data.get('collaboration_bias', 0))}%",
+                "종합 평가": member_data.get("overall_evaluation", "")
+            })
 
     # 팀원별 코칭 제안 데이터 처리
     일반_코칭_리스트 = []
     for item in 팀코칭데이터.get("general_coaching", []):
-        일반_코칭_리스트.append({
-            "팀원명": item.get("name", ""),
-            "핵심 강점": item.get("strengths", []),
-            "성장 보완점": item.get("improvement_points", []),
-            "협업 특성": item.get("collaboration_style", ""),
-            "성과 기여 요약": item.get("performance_summary", ""),
-            "다음 분기 코칭 제안": item.get("next_quarter_coaching", "")
-        })
+        if isinstance(item, dict):
+            일반_코칭_리스트.append({
+                "팀원명": item.get("name", ""),
+                "핵심 강점": item.get("strengths", []),
+                "성장 보완점": item.get("improvement_points", []),
+                "협업 특성": item.get("collaboration_style", ""),
+                "성과 기여 요약": item.get("performance_summary", ""),
+                "다음 분기 코칭 제안": item.get("next_quarter_coaching", "")
+            })
 
     집중_코칭_리스트 = []
     for item in 팀코칭데이터.get("focused_coaching", []):
-        집중_코칭_리스트.append({
-            "핵심 이슈": item.get("issue_summary", ""),
-            "상세 분석": item.get("root_cause_analysis", ""),
-            "리스크 요소": item.get("risk_factors", []),
-            "코칭 제안": item.get("coaching_plan", "")
-        })
+        if isinstance(item, dict):
+            집중_코칭_리스트.append({
+                "핵심 이슈": item.get("issue_summary", ""),
+                "상세 분석": item.get("root_cause_analysis", ""),
+                "리스크 요소": item.get("risk_factors", []),
+                "코칭 제안": item.get("coaching_plan", "")
+            })
     
     # 리스크 및 향후 운영 제안 데이터 처리
     주요_리스크_리스트 = []
     for risk_item in 리스크데이터.get("risk_analysis", {}).get("major_risks", []):
-        # 영향 예측 상세 처리
-        영향_예측_리스트 = []
-        for impact in risk_item.get("impacts", []):
-            영향_예측_리스트.append({
-                "영향 범위": impact.get("impact_scope", ""),
-                "발생 시점": impact.get("timeline", ""),
-                "영향 설명": impact.get("description", "")
-            })
-        
-        # 운영 개선 전략 상세 처리
-        운영_개선_전략_리스트 = []
-        for strategy in risk_item.get("strategies", []):
-            운영_개선_전략_리스트.append({
-                "전략 설명": strategy.get("description", "")
-            })
+        if isinstance(risk_item, dict):
+            # 영향 예측 상세 처리
+            영향_예측_리스트 = []
+            for impact in risk_item.get("impacts", []):
+                if isinstance(impact, dict):
+                    영향_예측_리스트.append({
+                        "영향 범위": impact.get("impact_scope", ""),
+                        "발생 시점": impact.get("timeline", ""),
+                        "영향 설명": impact.get("description", "")
+                    })
+            
+            # 운영 개선 전략 상세 처리
+            운영_개선_전략_리스트 = []
+            for strategy in risk_item.get("strategies", []):
+                if isinstance(strategy, dict):
+                    운영_개선_전략_리스트.append({
+                        "전략 설명": strategy.get("description", "")
+                    })
 
-        주요_리스크_리스트.append({
-            "주요리스크": risk_item.get("risk_name", ""),
-            "리스크 심각도": risk_item.get("severity", ""),
-            "리스크 설명": risk_item.get("description", ""),
-            "발생 원인": risk_item.get("causes", []),
-            "영향 예측": 영향_예측_리스트,
-            "운영 개선 전략 제안": 운영_개선_전략_리스트
-        })
+            주요_리스크_리스트.append({
+                "주요리스크": risk_item.get("risk_name", ""),
+                "리스크 심각도": risk_item.get("severity", ""),
+                "리스크 설명": risk_item.get("description", ""),
+                "발생 원인": risk_item.get("causes", []),
+                "영향 예측": 영향_예측_리스트,
+                "운영 개선 전략 제안": 운영_개선_전략_리스트
+            })
 
 
     한국어리포트 = {
@@ -252,7 +251,6 @@ def generate_korean_team_evaluation_report(
             "유사팀_평균": safe_convert_to_serializable(팀비교데이터.get("overall", {}).get("similar_avg_rate", 0)),
             "비교_분석": 팀비교데이터.get("overall", {}).get("comparison_result", ""),
             "팀_성과_분석_코멘트": 팀평가기본데이터.ai_team_overall_analysis_comment or "",
-            "전_분기_대비_성과_추이": f"{safe_convert_to_serializable(팀평가기본데이터.year_over_year_growth)}%" if 팀평가기본데이터.year_over_year_growth is not None else "N/A",
         },
         "팀_업무_목표_및_달성률": {
             "kpi_목록": [
@@ -280,8 +278,8 @@ def generate_korean_team_evaluation_report(
                     "기여_내용": member.ai_overall_contribution_summary_comment or ""
                 } for member in 팀원피드백데이터
             ],
-            "종합_평가": "팀원들의 전반적인 성과 기여도와 달성률을 기준으로 한 종합 분석입니다.",
-            "기여도_기준": "개인별 업무 달성률과 팀 목표 기여도를 종합하여 평가하였습니다."
+            # "종합_평가": "팀원들의 전반적인 성과 기여도와 달성률을 기준으로 한 종합 분석입니다.",
+            "기여도_기준": "개인별 업무 달성률을 종합하여 평가하였습니다."
         },
         "협업_네트워크": {
             "협업_매트릭스": 협업_네트워크_상세, # 상세 매핑된 리스트 사용
@@ -345,30 +343,72 @@ def validate_korean_team_report(report: dict) -> bool:
     print(f"   - ✅ 팀 리포트 검증 성공!")
     return True
 
-def main():
+def main(team_evaluation_id: Optional[int] = None):
     """
-    메인 실행 함수: 모든 팀 평가 리포트를 한국어 JSON으로 생성하고 DB에 저장합니다.
+    메인 실행 함수: 팀 평가 리포트를 한국어 JSON으로 생성하고 DB에 저장합니다.
+    
+    Args:
+        team_evaluation_id: 특정 팀 평가 ID. None이면 모든 팀 평가를 처리합니다.
     """
     try:
         engine = get_db_engine()
 
-        print(f"\n🗑️ 모든 기존 team evaluation report 데이터를 삭제합니다...")
-        clear_existing_team_reports(engine)
+        if team_evaluation_id is None:
+            # 모든 팀 평가 처리
+            print(f"\n🗑️ 모든 기존 team evaluation report 데이터를 삭제합니다...")
+            clear_existing_team_reports(engine)
 
-        all_team_evaluation_ids = fetch_all_team_evaluation_ids(engine)
-        if not all_team_evaluation_ids:
-            print("처리할 팀 평가가 데이터베이스에 없습니다.")
-            return
+            all_team_evaluation_ids = fetch_all_team_evaluation_ids(engine)
+            if not all_team_evaluation_ids:
+                print("처리할 팀 평가가 데이터베이스에 없습니다.")
+                return
 
-        success_count, error_count = 0, 0
-        for team_evaluation_id in all_team_evaluation_ids:
-            print(f"\n{'='*50}\n🚀 팀 평가 리포트 생성 시작 (ID: {team_evaluation_id})\n{'='*50}")
+            success_count, error_count = 0, 0
+            for current_team_evaluation_id in all_team_evaluation_ids:
+                print(f"\n{'='*50}\n🚀 팀 평가 리포트 생성 시작 (ID: {current_team_evaluation_id})\n{'='*50}")
+                try:
+                    팀평가기본데이터 = fetch_team_evaluation_basic_data(engine, current_team_evaluation_id)
+                    if not 팀평가기본데이터:
+                        print(f"⚠️ Team Evaluation ID {current_team_evaluation_id}를 조회하는 데 실패했습니다. 다음으로 넘어갑니다.")
+                        error_count += 1
+                        continue
+
+                    팀kpi데이터 = fetch_team_kpis(engine, 팀평가기본데이터.team_id)
+                    팀원피드백데이터 = fetch_team_members_feedback(engine, 팀평가기본데이터.team_id, 팀평가기본데이터.period_id)
+                    
+                    한국어리포트 = generate_korean_team_evaluation_report(팀평가기본데이터, 팀kpi데이터, 팀원피드백데이터)
+
+                    if not validate_korean_team_report(한국어리포트):
+                        print(f"   - ❌ 팀 리포트 데이터 검증 실패")
+                        error_count += 1
+                        continue
+
+                    save_team_json_report_to_db(engine, current_team_evaluation_id, 한국어리포트)
+                    success_count += 1
+
+                except Exception as e:
+                    print(f"⚠️ Team Evaluation ID {current_team_evaluation_id} 처리 중 심각한 오류 발생: {e}")
+                    import traceback
+                    traceback.print_exc()
+                    error_count += 1
+                    continue
+                time.sleep(0.5)
+
+            print(f"\n🎉 팀 평가 리포트 생성 완료!")
+            print(f"✅ 성공: {success_count}개")
+            print(f"❌ 실패: {error_count}개")
+            print(f"📊 총 처리: {len(all_team_evaluation_ids)}개")
+            
+        else:
+            # 특정 팀 평가만 처리
+            print(f"\n🎯 특정 팀 평가 ID {team_evaluation_id} 처리 시작")
+            print(f"{'='*50}")
+            
             try:
                 팀평가기본데이터 = fetch_team_evaluation_basic_data(engine, team_evaluation_id)
                 if not 팀평가기본데이터:
-                    print(f"⚠️ Team Evaluation ID {team_evaluation_id}를 조회하는 데 실패했습니다. 다음으로 넘어갑니다.")
-                    error_count += 1
-                    continue
+                    print(f"❌ Team Evaluation ID {team_evaluation_id}를 조회할 수 없습니다.")
+                    return
 
                 팀kpi데이터 = fetch_team_kpis(engine, 팀평가기본데이터.team_id)
                 팀원피드백데이터 = fetch_team_members_feedback(engine, 팀평가기본데이터.team_id, 팀평가기본데이터.period_id)
@@ -376,25 +416,18 @@ def main():
                 한국어리포트 = generate_korean_team_evaluation_report(팀평가기본데이터, 팀kpi데이터, 팀원피드백데이터)
 
                 if not validate_korean_team_report(한국어리포트):
-                    print(f"   - ❌ 팀 리포트 데이터 검증 실패")
-                    error_count += 1
-                    continue
+                    print(f"❌ 팀 리포트 데이터 검증 실패")
+                    return
 
                 save_team_json_report_to_db(engine, team_evaluation_id, 한국어리포트)
-                success_count += 1
-
+                print(f"\n✅ Team Evaluation ID {team_evaluation_id} 처리 완료!")
+                
             except Exception as e:
-                print(f"⚠️ Team Evaluation ID {team_evaluation_id} 처리 중 심각한 오류 발생: {e}")
+                print(f"❌ Team Evaluation ID {team_evaluation_id} 처리 중 오류 발생: {e}")
                 import traceback
                 traceback.print_exc()
-                error_count += 1
-                continue
-            time.sleep(0.5)
-
-        print(f"\n🎉 팀 평가 리포트 생성 완료!")
-        print(f"✅ 성공: {success_count}개")
-        print(f"❌ 실패: {error_count}개")
-        print(f"📊 총 처리: {len(all_team_evaluation_ids)}개")
+                return
+                
     except ValueError as e:
         print(f"설정 오류: {e}")
     except Exception as e:
