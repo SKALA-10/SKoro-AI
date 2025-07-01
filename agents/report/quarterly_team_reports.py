@@ -189,8 +189,12 @@ def generate_korean_team_evaluation_report(
     일반_코칭_리스트 = []
     for item in 팀코칭데이터.get("general_coaching", []):
         if isinstance(item, dict):
+            name = item.get("name", "")
+            emp_no = item.get("emp_no", "")
+            팀원명_표시 = f"{name}({emp_no})" if name and emp_no else name or emp_no or ""
+            
             일반_코칭_리스트.append({
-                "팀원명": item.get("name", ""),
+                "팀원명(사번)": 팀원명_표시,
                 "핵심 강점": item.get("strengths", []),
                 "성장 보완점": item.get("improvement_points", []),
                 "협업 특성": item.get("collaboration_style", ""),
@@ -201,7 +205,12 @@ def generate_korean_team_evaluation_report(
     집중_코칭_리스트 = []
     for item in 팀코칭데이터.get("focused_coaching", []):
         if isinstance(item, dict):
+            name = item.get("name", "")
+            emp_no = item.get("emp_no", "")
+            팀원명_표시 = f"{name}({emp_no})" if name and emp_no else name or emp_no or ""
+            
             집중_코칭_리스트.append({
+                "팀원명(사번)": 팀원명_표시,
                 "핵심 이슈": item.get("issue_summary", ""),
                 "상세 분석": item.get("root_cause_analysis", ""),
                 "리스크 요소": item.get("risk_factors", []),
