@@ -713,13 +713,16 @@ def validate_final_update_results(state: Module2State) -> Dict[str, Any]:
             print(f"        • 팀원 수: {ranking_validation['team_member_count']}명")
         
         # 5. 레포트 검증
-        if state['report_type'] == "quarterly" and state['feedback_report_ids']:
-            for report_id in state['feedback_report_ids']:
+        feedback_report_ids = state.get('feedback_report_ids') or []
+        final_evaluation_report_ids = state.get('final_evaluation_report_ids') or []
+        
+        if state['report_type'] == "quarterly" and feedback_report_ids:
+            for report_id in feedback_report_ids:
                 # feedback_reports 검증 로직
                 pass
         
-        elif state['report_type'] == "annual" and state['final_evaluation_report_ids']:
-            for report_id in state['final_evaluation_report_ids']:
+        elif state['report_type'] == "annual" and final_evaluation_report_ids:
+            for report_id in final_evaluation_report_ids:
                 # final_evaluation_reports 검증 로직
                 pass
         

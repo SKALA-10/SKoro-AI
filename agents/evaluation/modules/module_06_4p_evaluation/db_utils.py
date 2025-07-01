@@ -196,6 +196,26 @@ def fetch_feedback_report_id(team_id: int, period_id: int, emp_no: str) -> Optio
         return result.scalar_one_or_none()
 
 
+def fetch_final_evaluation_report_id(team_id: int, period_id: int, emp_no: str) -> Optional[int]:
+    """
+    team_id, period_id, emp_no로 final_evaluation_report_id를 조회
+    """
+    from agents.evaluation.modules.module_02_goal_achievement.db_utils import fetch_team_evaluation_id
+    team_evaluation_id = fetch_team_evaluation_id(team_id, period_id)
+    if not team_evaluation_id:
+        return None
+    with engine.connect() as connection:
+        query = text("""
+            SELECT final_evaluation_report_id FROM final_evaluation_reports
+            WHERE team_evaluation_id = :team_evaluation_id AND emp_no = :emp_no
+        """)
+        result = connection.execute(query, {
+            "team_evaluation_id": team_evaluation_id,
+            "emp_no": emp_no
+        })
+        return result.scalar_one_or_none()
+
+
 # ================================================================
 # DB 저장 함수들
 # ================================================================

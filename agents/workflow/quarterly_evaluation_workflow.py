@@ -1,4 +1,18 @@
 # =====================================
+# 분기별 평가 워크플로우
+# =====================================
+# 목적: 분기별 AI 평가 수행 (모듈2,3,6,4,8,10,11)
+# Phase 1: 팀별 평가 (모듈2,3,6)
+# - 모듈2: 목표달성도 분석
+# - 모듈3: Peer Talk 분석
+# - 모듈6: 4P BARS 평가
+# Phase 2: 팀별 평가 (모듈4)
+# - 모듈4: 협업 분석
+# Phase 3: 전사 모듈 (모듈8,10,11)
+# - 모듈8: 팀 성과 비교
+# - 모듈10: 개인 성장 코칭
+# - 모듈11: 팀 운영 리스크 분석
+# =====================================
 # 사용 예시 (터미널 실행 명령어)
 # =====================================
 # 전체 팀 자동 실행 (분기 2):
@@ -42,7 +56,15 @@ def run_phase1_all_teams(teams, period_id):
                 "team_id": team_id,
                 "period_id": period_id,
                 "target_task_ids": task_ids,
-                "target_team_kpi_ids": kpi_ids
+                "target_team_kpi_ids": kpi_ids,
+                # 분기별 평가에서 필요한 키들 추가
+                "feedback_report_ids": [],
+                "final_evaluation_report_ids": [],
+                "updated_task_ids": [],
+                "updated_team_kpi_ids": [],
+                "team_evaluation_id": None,
+                "team_context_guide": {},
+                "messages": []
             }
             graph = create_module2_graph()
             graph.invoke(state)
@@ -55,6 +77,7 @@ def run_phase1_all_teams(teams, period_id):
                 if member.get('role') == 'MANAGER':
                     continue
                 state = {
+                    "team_id": team_id,  # team_id 추가
                     "period_id": period_id,
                     "target_emp_no": member['emp_no'],
                     "peer_evaluation_ids": [],

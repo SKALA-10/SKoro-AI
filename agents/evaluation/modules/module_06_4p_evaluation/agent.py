@@ -301,6 +301,11 @@ def annual_format_and_save_submodule(state: Module6AgentState) -> Dict:
     """연말 저장 서브모듈 - 수정됨"""
     
     final_evaluation_report_id = state.get("final_evaluation_report_id")
+    if not final_evaluation_report_id:
+        # team_id, period_id, emp_no로 DB에서 조회
+        from .db_utils import fetch_final_evaluation_report_id
+        final_evaluation_report_id = fetch_final_evaluation_report_id(state["team_id"], state["period_id"], state["emp_no"])
+    
     integrated_result = state.get("integrated_data", {}).get("integrated_4p_result", {})
 
     print(f"연말 결과 저장 시작: final_evaluation_report_id={final_evaluation_report_id}")
