@@ -91,8 +91,7 @@ def fetch_team_member_evaluation_summary(engine: Engine, team_evaluation_id: int
             SELECT 
                 e.emp_name,
                 te.score as ai_recommended_score,
-                te.ai_reason as key_contribution_summary,
-                te.comment as comprehensive_comment
+                te.ai_reason as key_contribution_summary
             FROM temp_evaluations te
             JOIN employees e ON te.emp_no = e.emp_no
             WHERE te.team_evaluation_id = :team_evaluation_id
@@ -113,7 +112,7 @@ def fetch_team_members_detailed_evaluation(engine: Engine, team_evaluation_id: i
         member_query = text("""
             SELECT 
                 e.emp_no, e.emp_name, e.position, e.cl,
-                te.raw_score, te.score as ai_recommended_score, te.comment as evaluation_reason
+                te.raw_score, te.score as ai_recommended_score, te.ai_reason as key_contribution_summary
             FROM temp_evaluations te
             JOIN employees e ON te.emp_no = e.emp_no
             WHERE te.team_evaluation_id = :team_evaluation_id
@@ -288,18 +287,8 @@ def generate_middle_evaluation_report(
         "업무 수행 기간": 팀평가기본데이터.period_name or ""
     }
     
-    # 2. 팀원 평가 요약표
+    # 2. 팀원 평가 요약표 (협업 네트워크와 통합)
     팀원평가요약표 = []
-    for member in 팀원평가요약:
-        팀원평가요약표.append({
-            "팀원명": member.emp_name or "",
-            "AI 추천 점수 (CL 정규화)": safe_convert_to_serializable(member.ai_recommended_score),
-            "핵심 기여 요약": member.key_contribution_summary or "",
-            "종합 코멘트": member.comprehensive_comment or ""
-        })
-    
-    # 3. 협업 네트워크 처리
-    협업매트릭스_리스트: List[Dict] = []
     협업팀_요약 = ""
     
     if isinstance(협업네트워크, dict) and 협업네트워크:
@@ -308,35 +297,58 @@ def generate_middle_evaluation_report(
             협업팀_요약 = 협업네트워크.get("team_summary", "")
         elif isinstance(협업네트워크.get("data"), list):  # 직접 리스트인 경우
             협업매트릭스_리스트 = 협업네트워크.get("data", [])
+    else:
+        협업매트릭스_리스트 = []
     
-    협업_네트워크_표 = []
     if 협업매트릭스_리스트:
         for member_data in 협업매트릭스_리스트:
             if isinstance(member_data, dict):
-                협업_네트워크_표.append({
-                    "이름": member_data.get("name", ""),
+                # 해당 팀원의 AI 추천 점수 찾기
+                member_name = member_data.get("name", "")
+                ai_score = "데이터 없음"
+                
+                # 이름 매칭 (괄호 제거하여 비교)
+                clean_member_name = member_name.split('(')[0].strip() if '(' in member_name else member_name
+                
+                for member in 팀원평가요약:
+                    member_emp_name = member.emp_name or ""
+                    if member_emp_name == member_name or member_emp_name == clean_member_name:
+                        ai_score = safe_convert_to_serializable(member.ai_recommended_score)
+                        print(f"     - AI 점수 매칭 성공: {member_name} -> {ai_score}")
+                        break
+                
+                if ai_score == "데이터 없음":
+                    print(f"     - ⚠️ AI 점수 매칭 실패: {member_name} (찾을 수 있는 emp_name: {[m.emp_name for m in 팀원평가요약]})")
+                
+                팀원평가요약표.append({
+                    "이름": member_name,
+                    "AI 추천 점수": ai_score,
                     "총 Task 수": safe_convert_to_serializable(member_data.get("total_tasks", 0)),
                     "협업률": f"{safe_convert_to_serializable(member_data.get('collaboration_rate', 0))}%",
                     "핵심 협업자": member_data.get("key_collaborators", []),
                     "팀 내 역할": member_data.get("team_role", ""),
+                    "Peer Talk 평가": member_data.get("peer_talk_summary", ""),
                     "협업 편중도": f"{safe_convert_to_serializable(member_data.get('collaboration_bias', 0))}%",
                     "종합 평가": member_data.get("overall_evaluation", "")
                 })
     else:
         # 협업 데이터가 없는 경우 기본 메시지
-        협업_네트워크_표.append({
+        팀원평가요약표.append({
             "이름": "협업 데이터 없음",
+            "AI 추천 점수": "데이터 없음",
             "총 Task 수": "데이터 없음",
             "협업률": "데이터 없음",
             "핵심 협업자": ["협업 매트릭스 데이터가 등록되지 않았습니다."],
             "팀 내 역할": "데이터 등록 필요",
+            "Peer Talk 평가": "데이터 없음",
             "협업 편중도": "데이터 없음",
             "종합 평가": "협업 네트워크 분석을 위해서는 ai_collaboration_matrix 데이터가 필요합니다."
         })
         협업팀_요약 = "협업 네트워크 데이터가 등록되지 않아 분석이 불가능합니다."
     
-    협업네트워크_섹션 = {
-        "협업_매트릭스_표": 협업_네트워크_표,
+    # 팀원 평가 요약표 섹션 구성
+    팀원평가요약표_섹션 = {
+        "표": 팀원평가요약표,
         "팀_협업_요약": 협업팀_요약,
         "협업률_설명": "개인이 수행한 전체 업무 중, 다른 팀원과 실제로 협업한 업무가 차지하는 비율입니다.",
         "협업_편중도_설명": "특정 동료에게만 협업이 쏠려있는지, 혹은 여러 동료와 고르게 협업하는지를 나타내는 지표입니다."
@@ -391,7 +403,7 @@ def generate_middle_evaluation_report(
                 },
                 "종합 원점수": safe_convert_to_serializable(raw_score_data.get("raw_hybrid_score", "데이터 없음")),
                 "AI 추천 점수 (CL 정규화)": safe_convert_to_serializable(getattr(member_info, 'ai_recommended_score', 'N/A')),
-                "평가 근거 요약": getattr(member_info, 'evaluation_reason', '') or "평가 근거 요약이 없습니다."
+                "평가 근거 요약": getattr(member_info, 'key_contribution_summary', '') or "평가 근거 요약이 없습니다."
             }
             print(f"     - AI 점수 산출 기준 완료")
             
@@ -467,8 +479,7 @@ def generate_middle_evaluation_report(
     중간평가리포트 = {
         "리포트_유형": "최종전 중간평가 리포트 (Period 4)",
         "기본_정보": 기본정보,
-        "팀원_평가_요약표": 팀원평가요약표,
-        "협업_네트워크": 협업네트워크_섹션,
+        "팀원_평가_요약표": 팀원평가요약표_섹션,
         "팀원별_평가_근거": 팀원별_평가근거
     }
     
@@ -513,7 +524,7 @@ def validate_middle_report(report: dict) -> bool:
     중간평가 리포트 JSON 데이터의 필수 키 유효성을 검증합니다.
     """
     required_keys = [
-        "리포트_유형", "기본_정보", "팀원_평가_요약표", "협업_네트워크", "팀원별_평가_근거"
+        "리포트_유형", "기본_정보", "팀원_평가_요약표", "팀원별_평가_근거"
     ]
     
     print(f"   - 🔍 Period 4 중간평가 리포트 검증 시작...")
