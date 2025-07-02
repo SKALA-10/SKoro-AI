@@ -1,11 +1,12 @@
 # =====================================
 # 연말 2단계 평가 워크플로우
 # =====================================
-# 목적: 전사 모듈 실행 (모듈8,9,10,11)
+# 목적: 전사 모듈 실행 (모듈8,9,10,11) + 연말 리포트 생성
 # - 모듈8: 팀 성과 비교
 # - 모듈9: 부문별 CL 정규화
 # - 모듈10: 개인 성장 코칭
 # - 모듈11: 팀 운영 리스크 분석
+# - Phase5: 연말 개인/팀 리포트 생성
 # 전제 조건: 모든 팀이 SUBMITTED 상태여야 함
 # =====================================
 # 사용 예시 (터미널 실행 명령어)
@@ -16,6 +17,8 @@
 #   python agents/workflow/annual_phase2_workflow.py --period-id 4 --auto --teams 1
 # 여러 팀 지정 (예: 팀 1, 3, 5):
 #   python agents/workflow/annual_phase2_workflow.py --period-id 4 --auto --teams 1,3,5
+# Phase5만 실행 (연말 리포트 생성):
+#   python agents/workflow/annual_phase2_workflow.py --period-id 4 --phase5-only
 # =====================================
 
 import argparse
@@ -154,10 +157,27 @@ def run_phase4_all_modules(period_id: int, teams):
     asyncio.run(run_module11_for_all_teams())
     logging.info("Phase4: 완료")
 
+def run_phase5_reports(period_id: int, teams):
+    """
+    Phase5: 연말 개인별 리포트 → 팀별 리포트 순서로 생성
+    """
+    logging.info("Phase5: 연말 리포트 생성 시작")
+    
+    # 1. 개인별 리포트 생성
+    logging.info("[Phase5] 연말 개인별 리포트 생성 시작")
+    from agents.report.annual_individual_reports import main as generate_annual_individual_reports
+    generate_annual_individual_reports(period_id=period_id, teams=teams)
+    
+    # 2. 팀별 리포트 생성 (나중에 추가 예정)
+    # logging.info("[Phase5] 연말 팀별 리포트 생성 시작")
+    # from agents.report.annual_team_reports import main as generate_annual_team_reports
+    # generate_annual_team_reports(period_id=period_id, teams=teams)
+    
+    logging.info("Phase5: 연말 리포트 생성 완료!")
 
 def run_auto_workflow(period_id: int, specific_teams=None):
     """
-    --auto 옵션: Phase4(전사 모듈) 자동 실행
+    --auto 옵션: Phase4(전사 모듈) → Phase5(연말 리포트 생성) 자동 실행
     """
     logging.info("[AUTO] 연말 2단계 평가 자동 실행 시작")
     teams = get_target_teams(period_id, specific_teams)
@@ -174,6 +194,9 @@ def run_auto_workflow(period_id: int, specific_teams=None):
     # Phase4: 전사 모듈 자동 실행
     run_phase4_all_modules(period_id, teams)
     
+    # Phase5: 연말 리포트 생성
+    run_phase5_reports(period_id, teams)
+    
     # 완료 후 상태 업데이트
     for team_id in teams:
         update_team_status(team_id, period_id, "COMPLETED")
@@ -185,7 +208,19 @@ def main():
     parser.add_argument('--period-id', type=int, required=True)
     parser.add_argument('--teams', help='1,2,3 or all', required=False, default=None)
     parser.add_argument('--auto', action='store_true', help='모든 단계 자동 실행')
+    parser.add_argument('--phase5-only', action='store_true', help='Phase5(연말 리포트 생성)만 실행')
     args = parser.parse_args()
+
+    # --phase5-only 옵션: Phase5만 실행
+    if args.phase5_only:
+        if args.teams and args.teams != 'all':
+            team_list = parse_teams(args.teams)
+            logging.info(f"[Phase5-Only] 지정된 팀만 Phase5 실행: {team_list}")
+        else:
+            team_list = None
+            logging.info("[Phase5-Only] 전체 팀 Phase5 실행")
+        run_phase5_reports(args.period_id, team_list)
+        sys.exit(0)
 
     # --auto 옵션: 전체 or 특정 팀만 자동 실행
     if args.auto:
@@ -207,6 +242,10 @@ def main():
         return
 
     run_phase4_all_modules(args.period_id, teams)
+    
+    # Phase5: 연말 리포트 생성
+    run_phase5_reports(args.period_id, teams)
+    
     for team_id in teams:
         update_team_status(team_id, args.period_id, "COMPLETED")
     logging.info("연말 2단계 평가 워크플로우 완료!")

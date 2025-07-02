@@ -21,13 +21,60 @@ def get_db_engine() -> Engine:
     return engine
 
 # --- 2. 데이터 조회 함수 ---
-def fetch_final_evaluation_emp_nos(engine: Engine) -> List[str]:
-    query = text("SELECT DISTINCT emp_no FROM final_evaluation_reports ORDER BY emp_no;")
-    with engine.connect() as connection:
-        results = connection.execute(query).fetchall()
-    emp_nos = [row[0] for row in results]
-    print(f"✅ 총 {len(emp_nos)}명의 연말 평가 리포트를 생성합니다. 대상: {emp_nos}")
-    return emp_nos
+def fetch_final_evaluation_emp_nos(engine: Engine, period_id: Optional[int] = None, teams: Optional[list] = None) -> List[str]:
+    """
+    final_evaluation_reports 테이블에서 직원 번호를 조회합니다.
+    period_id와 teams가 주어지면 해당 조건에 맞는 직원들만 조회합니다.
+    """
+    try:
+        if teams and period_id:
+            placeholders = ','.join([':team_id_' + str(i) for i in range(len(teams))])
+            query = text(f"""
+                SELECT DISTINCT fer.emp_no 
+                FROM final_evaluation_reports fer
+                JOIN team_evaluations te ON fer.team_evaluation_id = te.team_evaluation_id
+                JOIN employees e ON fer.emp_no = e.emp_no
+                WHERE te.period_id = :period_id AND e.team_id IN ({placeholders})
+                ORDER BY fer.emp_no;
+            """)
+            params = {f'team_id_{i}': team_id for i, team_id in enumerate(teams)}
+            params['period_id'] = period_id
+            print(f"✅ 팀 {teams}, 분기 {period_id}의 연말 평가 대상자 조회")
+        elif teams:
+            placeholders = ','.join([':team_id_' + str(i) for i in range(len(teams))])
+            query = text(f"""
+                SELECT DISTINCT fer.emp_no 
+                FROM final_evaluation_reports fer
+                JOIN team_evaluations te ON fer.team_evaluation_id = te.team_evaluation_id
+                JOIN employees e ON fer.emp_no = e.emp_no
+                WHERE e.team_id IN ({placeholders})
+                ORDER BY fer.emp_no;
+            """)
+            params = {f'team_id_{i}': team_id for i, team_id in enumerate(teams)}
+            print(f"✅ 팀 {teams}의 연말 평가 대상자 조회")
+        elif period_id:
+            query = text("""
+                SELECT DISTINCT fer.emp_no 
+                FROM final_evaluation_reports fer
+                JOIN team_evaluations te ON fer.team_evaluation_id = te.team_evaluation_id
+                WHERE te.period_id = :period_id
+                ORDER BY fer.emp_no;
+            """)
+            params = {'period_id': period_id}
+            print(f"✅ 분기 {period_id}의 연말 평가 대상자 조회")
+        else:
+            query = text("SELECT DISTINCT emp_no FROM final_evaluation_reports ORDER BY emp_no;")
+            params = {}
+            print(f"✅ 모든 연말 평가 대상자 조회")
+        
+        with engine.connect() as connection:
+            results = connection.execute(query, params).fetchall()
+        emp_nos = [row[0] for row in results]
+        print(f"✅ 총 {len(emp_nos)}명의 연말 평가 리포트를 생성합니다. 대상: {emp_nos}")
+        return emp_nos
+    except Exception as e:
+        print(f"❌ 연말 평가 대상자 조회 중 오류 발생: {e}")
+        return []
 
 def fetch_final_evaluation_data(engine: Engine, emp_no: str) -> Optional[Row]:
     query = text("""
@@ -269,14 +316,88 @@ def validate_final_individual_report(report: dict) -> bool:
     print(f"   - ✅ 연말 개인 최종 평가 리포트 검증 성공!")
     return True
 
-def main(emp_no: Optional[str] = None):
+def clear_existing_final_reports(engine: Engine, period_id: Optional[int] = None, teams: Optional[list] = None):
+    """
+    기존 final_evaluation_reports.report 데이터를 NULL로 업데이트하여 삭제합니다.
+    period_id와 teams가 주어지면 해당 조건에 맞는 데이터만 삭제합니다.
+    """
+    try:
+        if teams and period_id:
+            placeholders = ','.join([':team_id_' + str(i) for i in range(len(teams))])
+            query = text(f"""
+                UPDATE final_evaluation_reports 
+                SET report = NULL 
+                WHERE report IS NOT NULL 
+                AND emp_no IN (
+                    SELECT e.emp_no FROM employees e WHERE e.team_id IN ({placeholders})
+                )
+                AND team_evaluation_id IN (
+                    SELECT te.team_evaluation_id FROM team_evaluations te WHERE te.period_id = :period_id
+                )
+            """)
+            params = {f'team_id_{i}': team_id for i, team_id in enumerate(teams)}
+            params['period_id'] = period_id
+            print(f"🗑️ 팀 {teams}, 분기 {period_id}의 기존 final_evaluation_reports.report 데이터를 삭제합니다...")
+        elif teams:
+            placeholders = ','.join([':team_id_' + str(i) for i in range(len(teams))])
+            query = text(f"""
+                UPDATE final_evaluation_reports 
+                SET report = NULL 
+                WHERE report IS NOT NULL 
+                AND emp_no IN (
+                    SELECT e.emp_no FROM employees e WHERE e.team_id IN ({placeholders})
+                )
+            """)
+            params = {f'team_id_{i}': team_id for i, team_id in enumerate(teams)}
+            print(f"🗑️ 팀 {teams}의 기존 final_evaluation_reports.report 데이터를 삭제합니다...")
+        elif period_id:
+            query = text("""
+                UPDATE final_evaluation_reports 
+                SET report = NULL 
+                WHERE report IS NOT NULL 
+                AND team_evaluation_id IN (
+                    SELECT te.team_evaluation_id FROM team_evaluations te WHERE te.period_id = :period_id
+                )
+            """)
+            params = {'period_id': period_id}
+            print(f"🗑️ 분기 {period_id}의 기존 final_evaluation_reports.report 데이터를 삭제합니다...")
+        else:
+            query = text("UPDATE final_evaluation_reports SET report = NULL WHERE report IS NOT NULL")
+            params = {}
+            print(f"🗑️ 모든 기존 final_evaluation_reports.report 데이터를 삭제합니다...")
+        
+        with engine.connect() as connection:
+            with connection.begin() as transaction:
+                result = connection.execute(query, params)
+                affected_rows = result.rowcount
+                transaction.commit()
+                print(f"✅ 기존 final_evaluation_reports.report 데이터 {affected_rows}개 삭제 완료")
+    except Exception as e:
+        print(f"❌ 기존 데이터 삭제 중 오류 발생: {e}")
+        raise
+
+def main(emp_no: Optional[str] = None, period_id: Optional[int] = None, teams: Optional[list] = None):
+    """
+    메인 실행 함수: 연말 개인 최종 평가 리포트를 생성하고 DB에 저장합니다.
+    
+    Args:
+        emp_no: 특정 직원 번호. None이면 모든 직원을 처리합니다.
+        period_id: 특정 분기 ID. None이면 모든 분기를 처리합니다.
+        teams: 특정 팀 ID 리스트. None이면 모든 팀을 처리합니다.
+    """
     try:
         engine = get_db_engine()
+        
         if emp_no is None:
-            all_emp_nos = fetch_final_evaluation_emp_nos(engine)
+            # 모든 직원 처리
+            print(f"\n🗑️ 기존 final_evaluation_reports.report 데이터를 삭제합니다...")
+            clear_existing_final_reports(engine, period_id, teams)
+            
+            all_emp_nos = fetch_final_evaluation_emp_nos(engine, period_id, teams)
             if not all_emp_nos:
                 print("처리할 연말 평가 대상자가 없습니다.")
                 return
+                
             success_count, error_count = 0, 0
             for current_emp_no in all_emp_nos:
                 print(f"\n{'='*50}\n🚀 연말 개인 최종 평가 리포트 생성 시작 ({current_emp_no})\n{'='*50}")
@@ -308,7 +429,10 @@ def main(emp_no: Optional[str] = None):
             print(f"❌ 실패: {error_count}개")
             print(f"📊 총 처리: {len(all_emp_nos)}개")
         else:
+            # 특정 직원만 처리
             print(f"\n🎯 특정 직원 {emp_no}님 처리 시작")
+            if period_id:
+                print(f"📅 대상 분기: {period_id}")
             print(f"{'='*50}")
             try:
                 final_data = fetch_final_evaluation_data(engine, emp_no)
