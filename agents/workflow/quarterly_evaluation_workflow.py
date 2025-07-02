@@ -233,9 +233,23 @@ def run_phase3_all_modules(period_id: int, teams):
     asyncio.run(run_module11_for_all_teams())
     logging.info("Phase3: 완료")
 
+def run_phase4_individual_reports(period_id: int, teams):
+    """
+    Phase4: 개인별 리포트 생성
+    """
+    logging.info("Phase4: 개인별 리포트 생성 시작")
+    from agents.report.quarterly_individual_reports import main as generate_individual_reports
+    if teams:
+        logging.info(f"[Phase4] 지정된 팀 {teams}의 개인별 리포트 생성 시작")
+        generate_individual_reports(period_id=period_id, teams=teams)
+    else:
+        logging.info("[Phase4] 전체 개인별 리포트 생성 시작")
+        generate_individual_reports()
+    logging.info("Phase4: 개인별 리포트 생성 완료!")
+
 def run_auto_workflow(period_id: int, specific_teams=None):
     """
-    --auto 옵션: Phase1/2(팀별 평가) → 동기화 체크 → Phase3(전사 모듈)까지 자동 실행
+    --auto 옵션: Phase1/2(팀별 평가) → 동기화 체크 → Phase3(전사 모듈) → Phase4(리포트 생성)까지 자동 실행
     """
     logging.info("[AUTO] 전체 평가 자동 실행 시작")
     teams = get_target_teams(period_id, specific_teams)
@@ -254,6 +268,9 @@ def run_auto_workflow(period_id: int, specific_teams=None):
 
     # Phase3: 전사 모듈 자동 실행
     run_phase3_all_modules(period_id, teams)
+
+    # Phase4: 개인별 리포트 생성
+    run_phase4_individual_reports(period_id, teams)
     logging.info("[AUTO] 전체 평가 자동 실행 완료!")
 
 def main():
@@ -261,7 +278,19 @@ def main():
     parser.add_argument('--period-id', type=int, required=True)
     parser.add_argument('--teams', help='1,2,3 or all', required=False, default=None)
     parser.add_argument('--auto', action='store_true', help='모든 단계 자동 실행')
+    parser.add_argument('--phase4-only', action='store_true', help='Phase4(개인별 리포트 생성)만 실행')
     args = parser.parse_args()
+
+    # --phase4-only 옵션: Phase4만 실행
+    if args.phase4_only:
+        if args.teams and args.teams != 'all':
+            team_list = parse_teams(args.teams)
+            logging.info(f"[Phase4-Only] 지정된 팀만 Phase4 실행: {team_list}")
+        else:
+            team_list = None
+            logging.info("[Phase4-Only] 전체 팀 Phase4 실행")
+        run_phase4_individual_reports(args.period_id, team_list)
+        sys.exit(0)
 
     # --auto 옵션: 전체 or 특정 팀만 자동 실행
     if args.auto:
@@ -286,6 +315,8 @@ def main():
         logging.warning("일부 팀이 Phase2를 완료하지 못했습니다. 중단합니다.")
         return
     run_phase3_all_modules(args.period_id, teams)
+    # Phase4: 개인별 리포트 생성
+    run_phase4_individual_reports(args.period_id, teams)
     logging.info("분기별 평가 워크플로우 전체 완료!")
 
 if __name__ == "__main__":
