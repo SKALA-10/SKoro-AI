@@ -3,9 +3,9 @@ from typing import Dict, Any
 from fastapi import APIRouter
 from sqlalchemy import select
 
-from agents.evaluation.modules.module_01_kpi_generator.agent import GeneratedKpiResponse, run_kpi_generation_for_team
-from agents.evaluation.modules.module_01_kpi_generator.db_utils import AsyncSessionLocal
-from agents.evaluation.modules.module_01_kpi_generator.models import Employee
+from agents.kpi_generator.agent import GeneratedKpiResponse, run_kpi_generation_for_team
+from agents.kpi_generator.db_utils import AsyncSessionLocal
+from agents.kpi_generator.models import Employee
 
 router = APIRouter(tags=["KPI Generation"])
 
