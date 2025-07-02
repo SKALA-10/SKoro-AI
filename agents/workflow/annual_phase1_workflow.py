@@ -17,6 +17,8 @@
 #   python agents/workflow/annual_phase1_workflow.py --period-id 4 --auto --teams 1
 # 여러 팀 지정 (예: 팀 1, 3, 5):
 #   python agents/workflow/annual_phase1_workflow.py --period-id 4 --auto --teams 1,3,5
+# Phase4만 실행 (연말 중간평가 리포트 생성):
+#   python agents/workflow/annual_phase1_workflow.py --period-id 4 --phase4-only
 # =====================================
 
 import argparse
@@ -160,9 +162,21 @@ def run_phase3_all_teams(teams, period_id):
         update_team_status(team_id, period_id, "AI_PHASE3_COMPLETED")
         logging.info(f"[Phase3] 팀 {team_id} 완료")
 
+# Phase 4: 연말 중간평가 리포트 생성
+def run_phase4_middle_reports(period_id: int, teams):
+    """
+    Phase4: 연말 중간평가 리포트 생성
+    """
+    logging.info("Phase4: 연말 중간평가 리포트 생성 시작")
+    
+    from agents.report.annual_middle_reports import main as generate_middle_reports
+    generate_middle_reports(period_id=period_id, teams=teams)
+    
+    logging.info("Phase4: 연말 중간평가 리포트 생성 완료!")
+
 def run_auto_workflow(period_id: int, specific_teams=None):
     """
-    --auto 옵션: Phase1/2/3(팀별 평가)까지 자동 실행
+    --auto 옵션: Phase1/2/3(팀별 평가) → 동기화 체크 → Phase4(연말 중간평가 리포트 생성)까지 자동 실행
     """
     logging.info("[AUTO] 연말 1단계 평가 자동 실행 시작")
     teams = get_target_teams(period_id, specific_teams)
@@ -178,7 +192,10 @@ def run_auto_workflow(period_id: int, specific_teams=None):
     if not all_completed:
         logging.warning(f"[AUTO] 일부 팀이 아직 Phase3를 완료하지 못했습니다.")
     else:
-        logging.info("[AUTO] 모든 팀이 Phase3를 완료했습니다. 팀장 수정 및 제출을 기다립니다.")
+        logging.info("[AUTO] 모든 팀이 Phase3를 완료했습니다.")
+
+    # Phase4: 연말 중간평가 리포트 생성
+    run_phase4_middle_reports(period_id, teams)
     
     logging.info("[AUTO] 연말 1단계 평가 자동 실행 완료!")
 
@@ -187,7 +204,19 @@ def main():
     parser.add_argument('--period-id', type=int, required=True)
     parser.add_argument('--teams', help='1,2,3 or all', required=False, default=None)
     parser.add_argument('--auto', action='store_true', help='모든 단계 자동 실행')
+    parser.add_argument('--phase4-only', action='store_true', help='Phase4(연말 중간평가 리포트 생성)만 실행')
     args = parser.parse_args()
+
+    # --phase4-only 옵션: Phase4만 실행
+    if args.phase4_only:
+        if args.teams and args.teams != 'all':
+            team_list = parse_teams(args.teams)
+            logging.info(f"[Phase4-Only] 지정된 팀만 Phase4 실행: {team_list}")
+        else:
+            team_list = None
+            logging.info("[Phase4-Only] 전체 팀 Phase4 실행")
+        run_phase4_middle_reports(args.period_id, team_list)
+        sys.exit(0)
 
     # --auto 옵션: 전체 or 특정 팀만 자동 실행
     if args.auto:
@@ -215,6 +244,10 @@ def main():
     if not check_all_teams_phase_completed(teams, args.period_id, "AI_PHASE3_COMPLETED"):
         logging.warning("일부 팀이 Phase3를 완료하지 못했습니다. 중단합니다.")
         return
+    
+    # Phase4: 연말 중간평가 리포트 생성
+    run_phase4_middle_reports(args.period_id, teams)
+    
     logging.info("연말 1단계 평가 워크플로우 완료! 팀장 수정 및 제출을 기다립니다.")
 
 if __name__ == "__main__":

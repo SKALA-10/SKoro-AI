@@ -11,7 +11,7 @@ from sqlalchemy.exc import ProgrammingError
 
 from config.settings import DatabaseConfig
 
-print("✅ 팀장용 최종전 중간평가 리포트 생성기 (Period 4 전용) - 기본 라이브러리 임포트 완료")
+print("✅ 연말 중간평가 리포트 생성기 - 기본 라이브러리 임포트 완료")
 
 # --- 1. 데이터베이스 연동 함수 ---
 
@@ -24,41 +24,130 @@ def get_db_engine() -> Engine:
     print("✅ 데이터베이스 엔진 생성 완료")
     return engine
 
-def clear_existing_middle_reports(engine: Engine):
-    """기존 Period 4의 team_evaluations.middle_report 데이터만 삭제"""
+def clear_existing_middle_reports(engine: Engine, teams: Optional[list] = None, period_id: Optional[int] = None):
+    """
+    기존 team_evaluations.middle_report 데이터를 NULL로 업데이트하여 삭제합니다.
+    teams와 period_id가 주어지면 해당 팀, 해당 분기의 데이터만 삭제합니다.
+    """
     try:
-        query = text("""
-            UPDATE team_evaluations 
-            SET middle_report = NULL 
-            WHERE middle_report IS NOT NULL 
-            AND period_id = 4
-        """)
+        if teams and period_id:
+            placeholders = ','.join([':team_id_' + str(i) for i in range(len(teams))])
+            query = text(f"""
+                UPDATE team_evaluations 
+                SET middle_report = NULL 
+                WHERE middle_report IS NOT NULL 
+                AND team_id IN ({placeholders})
+                AND period_id = :period_id
+            """)
+            params = {f'team_id_{i}': team_id for i, team_id in enumerate(teams)}
+            params['period_id'] = period_id
+            print(f"🗑️ 팀 {teams}, 분기 {period_id}의 기존 team_evaluations.middle_report 데이터를 삭제합니다...")
+        elif teams:
+            placeholders = ','.join([':team_id_' + str(i) for i in range(len(teams))])
+            query = text(f"""
+                UPDATE team_evaluations 
+                SET middle_report = NULL 
+                WHERE middle_report IS NOT NULL 
+                AND team_id IN ({placeholders})
+            """)
+            params = {f'team_id_{i}': team_id for i, team_id in enumerate(teams)}
+            print(f"🗑️ 팀 {teams}의 기존 team_evaluations.middle_report 데이터를 삭제합니다...")
+        elif period_id:
+            query = text("""
+                UPDATE team_evaluations 
+                SET middle_report = NULL 
+                WHERE middle_report IS NOT NULL 
+                AND period_id = :period_id
+            """)
+            params = {'period_id': period_id}
+            print(f"🗑️ 분기 {period_id}의 기존 team_evaluations.middle_report 데이터를 삭제합니다...")
+        else:
+            query = text("UPDATE team_evaluations SET middle_report = NULL WHERE middle_report IS NOT NULL")
+            params = {}
+            print(f"🗑️ 모든 기존 team_evaluations.middle_report 데이터를 삭제합니다...")
         with engine.connect() as connection:
             with connection.begin() as transaction:
-                result = connection.execute(query)
+                result = connection.execute(query, params)
                 affected_rows = result.rowcount
                 transaction.commit()
-                print(f"✅ 기존 Period 4 team_evaluations.middle_report 데이터 {affected_rows}개 삭제 완료")
+                print(f"✅ 기존 team_evaluations.middle_report 데이터 {affected_rows}개 삭제 완료")
     except Exception as e:
         print(f"❌ 기존 데이터 삭제 중 오류 발생: {e}")
         raise
 
-def fetch_period4_team_evaluation_ids(engine: Engine) -> List[int]:
-    """Period 4의 팀 평가 ID만 조회"""
-    query = text("""
-        SELECT team_evaluation_id 
-        FROM team_evaluations 
-        WHERE period_id = 4
-        ORDER BY team_evaluation_id;
-    """)
-    with engine.connect() as connection:
-        results = connection.execute(query).fetchall()
-    ids = [row[0] for row in results]
-    print(f"✅ Period 4 전용: 총 {len(ids)}개의 최종전 중간평가 리포트를 생성합니다. 대상 ID: {ids}")
-    return ids
+def fetch_team_evaluation_ids(engine: Engine, period_id: Optional[int] = None, teams: Optional[list] = None) -> List[int]:
+    """
+    조건에 맞는 team_evaluation_id들을 조회합니다.
+    """
+    try:
+        if teams and period_id:
+            placeholders = ','.join([':team_id_' + str(i) for i in range(len(teams))])
+            query = text(f"""
+                SELECT team_evaluation_id 
+                FROM team_evaluations 
+                WHERE team_id IN ({placeholders}) AND period_id = :period_id
+                ORDER BY team_evaluation_id;
+            """)
+            params = {f'team_id_{i}': team_id for i, team_id in enumerate(teams)}
+            params['period_id'] = period_id
+            print(f"✅ 팀 {teams}, 분기 {period_id}의 team_evaluation_id 조회")
+        elif teams:
+            placeholders = ','.join([':team_id_' + str(i) for i in range(len(teams))])
+            query = text(f"""
+                SELECT team_evaluation_id 
+                FROM team_evaluations 
+                WHERE team_id IN ({placeholders})
+                ORDER BY team_evaluation_id;
+            """)
+            params = {f'team_id_{i}': team_id for i, team_id in enumerate(teams)}
+            print(f"✅ 팀 {teams}의 모든 team_evaluation_id 조회")
+        elif period_id:
+            query = text("""
+                SELECT team_evaluation_id 
+                FROM team_evaluations 
+                WHERE period_id = :period_id
+                ORDER BY team_evaluation_id;
+            """)
+            params = {'period_id': period_id}
+            print(f"✅ 분기 {period_id}의 모든 team_evaluation_id 조회")
+        else:
+            query = text("SELECT team_evaluation_id FROM team_evaluations ORDER BY team_evaluation_id")
+            params = {}
+            print(f"✅ 모든 team_evaluation_id 조회")
+        
+        with engine.connect() as connection:
+            results = connection.execute(query, params).fetchall()
+        ids = [row[0] for row in results]
+        print(f"✅ 총 {len(ids)}개의 연말 중간평가 리포트를 생성합니다. 대상 ID: {ids}")
+        return ids
+    except Exception as e:
+        print(f"❌ team_evaluation_id 조회 중 오류 발생: {e}")
+        return []
+
+def check_period_is_final(engine: Engine, period_id: int) -> bool:
+    """
+    해당 period가 연말(최종) 평가인지 확인합니다.
+    """
+    try:
+        query = text("SELECT is_final FROM periods WHERE period_id = :period_id")
+        with engine.connect() as connection:
+            result = connection.execute(query, {"period_id": period_id}).first()
+        if result:
+            is_final = result.is_final
+            if is_final:
+                print(f"✅ 분기 {period_id}는 연말(최종) 평가입니다.")
+            else:
+                print(f"⚠️ 분기 {period_id}는 연말(최종) 평가가 아닙니다. 중간평가 리포트 생성이 적절하지 않을 수 있습니다.")
+            return is_final
+        else:
+            print(f"⚠️ 분기 {period_id} 정보를 찾을 수 없습니다.")
+            return False
+    except Exception as e:
+        print(f"❌ 분기 정보 조회 중 오류 발생: {e}")
+        return False
 
 def fetch_team_evaluation_basic_data(engine: Engine, team_evaluation_id: int) -> Optional[Row]:
-    """Period 4 팀 평가의 기본 데이터를 조회합니다."""
+    """팀 평가의 기본 데이터를 조회합니다."""
     try:
         query = text("""
             SELECT
@@ -73,12 +162,12 @@ def fetch_team_evaluation_basic_data(engine: Engine, team_evaluation_id: int) ->
             JOIN teams t ON te.team_id = t.team_id
             JOIN periods p ON te.period_id = p.period_id
             LEFT JOIN employees m ON t.team_id = m.team_id AND m.role = 'MANAGER'
-            WHERE te.team_evaluation_id = :team_evaluation_id AND te.period_id = 4;
+            WHERE te.team_evaluation_id = :team_evaluation_id;
         """)
         with engine.connect() as connection:
             result = connection.execute(query, {"team_evaluation_id": team_evaluation_id}).first()
         if result:
-            print(f"   - Team Evaluation ID {team_evaluation_id} Period 4 데이터 조회 완료: {result.team_name} 팀")
+            print(f"   - Team Evaluation ID {team_evaluation_id} 데이터 조회 완료: {result.team_name} 팀")
         return result
     except Exception as e:
         print(f"   - ❌ 팀 평가 데이터 조회 중 오류 발생: {e}")
@@ -215,7 +304,7 @@ def fetch_collaboration_matrix(engine: Engine, team_evaluation_id: int) -> Dict[
         query = text("""
             SELECT ai_collaboration_matrix
             FROM team_evaluations
-            WHERE team_evaluation_id = :team_evaluation_id AND period_id = 4;
+            WHERE team_evaluation_id = :team_evaluation_id;
         """)
         with engine.connect() as connection:
             result = connection.execute(query, {"team_evaluation_id": team_evaluation_id}).first()
@@ -384,7 +473,7 @@ def generate_middle_evaluation_report(
                     "실적 요약": getattr(member_info, 'ai_annual_performance_summary_comment', '') or "실적 요약 데이터가 없습니다."
                 },
                 "SK_Values": {
-                    "Passionate": {
+                    "Passive": {
                         "점수": safe_convert_to_serializable(fourp_evaluation_data.get("passionate", {}).get("score", "데이터 없음")),
                         "평가 근거": fourp_evaluation_data.get("passionate", {}).get("reasoning", "평가 근거 데이터가 없습니다.")
                     },
@@ -477,7 +566,7 @@ def generate_middle_evaluation_report(
     
     # 최종 리포트 구성
     중간평가리포트 = {
-        "리포트_유형": "최종전 중간평가 리포트 (Period 4)",
+        "리포트_유형": f"연말 중간평가 리포트 (Period {팀평가기본데이터.period_id})",
         "기본_정보": 기본정보,
         "팀원_평가_요약표": 팀원평가요약표_섹션,
         "팀원별_평가_근거": 팀원별_평가근거
@@ -497,11 +586,10 @@ def save_middle_report_to_db(engine: Engine, team_evaluation_id: int, json_repor
         print(f"   - ❌ JSON 직렬화 오류: {e}")
         json_content = json.dumps(safe_convert_to_serializable(json_report), ensure_ascii=False, indent=2, default=str)
 
-    # Period 4 재검증을 위한 쿼리
     query = text("""
         UPDATE team_evaluations 
         SET middle_report = :report_content 
-        WHERE team_evaluation_id = :team_evaluation_id AND period_id = 4;
+        WHERE team_evaluation_id = :team_evaluation_id;
     """)
     
     with engine.connect() as connection:
@@ -510,10 +598,10 @@ def save_middle_report_to_db(engine: Engine, team_evaluation_id: int, json_repor
                 result = connection.execute(query, {"report_content": json_content, "team_evaluation_id": team_evaluation_id})
                 if result.rowcount > 0:
                     transaction.commit()
-                    print(f"   - ✅ Team Evaluation ID {team_evaluation_id} (Period 4)의 중간평가 리포트가 middle_report에 성공적으로 저장되었습니다.")
+                    print(f"   - ✅ Team Evaluation ID {team_evaluation_id}의 중간평가 리포트가 middle_report에 성공적으로 저장되었습니다.")
                 else:
                     transaction.rollback()
-                    print(f"   - ⚠️ Team Evaluation ID {team_evaluation_id}가 Period 4가 아니거나 존재하지 않습니다.")
+                    print(f"   - ⚠️ Team Evaluation ID {team_evaluation_id}가 존재하지 않습니다.")
             except Exception as e:
                 print(f"   - ❌ DB 저장 중 오류 발생: {e}")
                 transaction.rollback()
@@ -527,38 +615,39 @@ def validate_middle_report(report: dict) -> bool:
         "리포트_유형", "기본_정보", "팀원_평가_요약표", "팀원별_평가_근거"
     ]
     
-    print(f"   - 🔍 Period 4 중간평가 리포트 검증 시작...")
+    print(f"   - 🔍 연말 중간평가 리포트 검증 시작...")
     for key in required_keys:
         if key not in report:
             print(f"   - ⚠️ 필수 키 누락: {key}")
             return False
     
-    print(f"   - ✅ Period 4 중간평가 리포트 검증 성공!")
+    print(f"   - ✅ 연말 중간평가 리포트 검증 성공!")
     return True
 
-def main(team_evaluation_id: Optional[int] = None):
+def main(period_id: Optional[int] = None, teams: Optional[list] = None):
     """
-    메인 실행 함수: Period 4에만 중간평가 리포트를 생성하고 middle_report에 저장합니다.
+    메인 실행 함수: 연말 중간평가 리포트를 생성하고 middle_report에 저장합니다.
     
     Args:
-        team_evaluation_id: 특정 팀 평가 ID. None이면 모든 Period 4 팀 평가를 처리합니다.
+        period_id: 특정 분기 ID. None이면 모든 분기를 처리합니다.
+        teams: 특정 팀 ID 리스트. None이면 모든 팀을 처리합니다.
     """
     try:
         engine = get_db_engine()
 
-        if team_evaluation_id is None:
-            # 모든 Period 4 팀 평가 처리
-            print(f"\n🗑️ 기존 Period 4 middle_report 데이터를 삭제합니다...")
+        if period_id is None and teams is None:
+            # 모든 팀 평가 처리
+            print(f"\n🗑️ 모든 기존 team_evaluations.middle_report 데이터를 삭제합니다...")
             clear_existing_middle_reports(engine)
 
-            period4_ids = fetch_period4_team_evaluation_ids(engine)
-            if not period4_ids:
-                print("처리할 Period 4 팀 평가가 데이터베이스에 없습니다.")
+            all_team_evaluation_ids = fetch_team_evaluation_ids(engine)
+            if not all_team_evaluation_ids:
+                print("처리할 팀 평가가 데이터베이스에 없습니다.")
                 return
 
             success_count, error_count = 0, 0
-            for current_team_evaluation_id in period4_ids:
-                print(f"\n{'='*50}\n🚀 Period 4 중간평가 리포트 생성 시작 (ID: {current_team_evaluation_id})\n{'='*50}")
+            for current_team_evaluation_id in all_team_evaluation_ids:
+                print(f"\n{'='*50}\n🚀 연말 중간평가 리포트 생성 시작 (ID: {current_team_evaluation_id})\n{'='*50}")
                 try:
                     팀평가기본데이터 = fetch_team_evaluation_basic_data(engine, current_team_evaluation_id)
                     if not 팀평가기본데이터:
@@ -566,11 +655,10 @@ def main(team_evaluation_id: Optional[int] = None):
                         error_count += 1
                         continue
 
-                    # Period 4 재검증
-                    if 팀평가기본데이터.period_id != 4:
-                        print(f"⚠️ Team Evaluation ID {current_team_evaluation_id}는 Period {팀평가기본데이터.period_id}입니다. Period 4만 처리 가능합니다.")
-                        error_count += 1
-                        continue
+                    # 연말 여부 확인
+                    is_final = check_period_is_final(engine, 팀평가기본데이터.period_id)
+                    if not is_final:
+                        print(f"⚠️ Period {팀평가기본데이터.period_id}는 연말 평가가 아닙니다. 중간평가 리포트 생성이 적절하지 않을 수 있습니다.")
 
                     팀원평가요약 = fetch_team_member_evaluation_summary(engine, current_team_evaluation_id)
                     팀원상세평가 = fetch_team_members_detailed_evaluation(engine, current_team_evaluation_id)
@@ -597,50 +685,71 @@ def main(team_evaluation_id: Optional[int] = None):
                 
                 time.sleep(0.5)  # DB 부하 방지
 
-            print(f"\n🎉 Period 4 중간평가 리포트 생성 완료!")
+            print(f"\n🎉 연말 중간평가 리포트 생성 완료!")
             print(f"✅ 성공: {success_count}개")
             print(f"❌ 실패: {error_count}개")
-            print(f"📊 총 처리: {len(period4_ids)}개")
-            
-            # Period 1~3은 middle_report가 NULL로 유지됨을 확인
-            print(f"\n📋 Period 1~3의 middle_report는 NULL로 유지됩니다.")
+            print(f"📊 총 처리: {len(all_team_evaluation_ids)}개")
             
         else:
-            # 특정 팀 평가만 처리
-            print(f"\n🎯 특정 팀 평가 ID {team_evaluation_id} 처리 시작")
+            # 특정 조건으로 처리
+            if teams and period_id:
+                print(f"\n🎯 특정 팀 {teams}, 분기 {period_id} 처리 시작")
+            elif teams:
+                print(f"\n🎯 특정 팀 {teams} 처리 시작 (모든 분기)")
+            elif period_id:
+                print(f"\n🎯 특정 분기 {period_id} 처리 시작 (모든 팀)")
             print(f"{'='*50}")
             
-            try:
-                팀평가기본데이터 = fetch_team_evaluation_basic_data(engine, team_evaluation_id)
-                if not 팀평가기본데이터:
-                    print(f"❌ Team Evaluation ID {team_evaluation_id}를 조회할 수 없습니다.")
-                    return
-
-                # Period 4 검증
-                if 팀평가기본데이터.period_id != 4:
-                    print(f"❌ Team Evaluation ID {team_evaluation_id}는 Period {팀평가기본데이터.period_id}입니다. Period 4만 처리 가능합니다.")
-                    return
-
-                팀원평가요약 = fetch_team_member_evaluation_summary(engine, team_evaluation_id)
-                팀원상세평가 = fetch_team_members_detailed_evaluation(engine, team_evaluation_id)
-                협업네트워크 = fetch_collaboration_matrix(engine, team_evaluation_id)
-                
-                중간평가리포트 = generate_middle_evaluation_report(
-                    팀평가기본데이터, 팀원평가요약, 팀원상세평가, 협업네트워크
-                )
-
-                if not validate_middle_report(중간평가리포트):
-                    print(f"❌ 중간평가 리포트 데이터 검증 실패")
-                    return
-
-                save_middle_report_to_db(engine, team_evaluation_id, 중간평가리포트)
-                print(f"\n✅ Team Evaluation ID {team_evaluation_id} 처리 완료!")
-                
-            except Exception as e:
-                print(f"❌ Team Evaluation ID {team_evaluation_id} 처리 중 오류 발생: {e}")
-                import traceback
-                traceback.print_exc()
+            # 연말 여부 확인
+            if period_id:
+                is_final = check_period_is_final(engine, period_id)
+                if not is_final:
+                    print(f"⚠️ 분기 {period_id}는 연말 평가가 아닙니다. 중간평가 리포트 생성이 적절하지 않을 수 있습니다.")
+            
+            # 조건에 맞는 team_evaluation_id 조회
+            target_team_evaluation_ids = fetch_team_evaluation_ids(engine, period_id, teams)
+            if not target_team_evaluation_ids:
+                print("조건에 맞는 팀 평가가 데이터베이스에 없습니다.")
                 return
+
+            success_count, error_count = 0, 0
+            for current_team_evaluation_id in target_team_evaluation_ids:
+                print(f"\n{'='*50}\n🚀 연말 중간평가 리포트 생성 시작 (ID: {current_team_evaluation_id})\n{'='*50}")
+                try:
+                    팀평가기본데이터 = fetch_team_evaluation_basic_data(engine, current_team_evaluation_id)
+                    if not 팀평가기본데이터:
+                        print(f"⚠️ Team Evaluation ID {current_team_evaluation_id}를 조회하는 데 실패했습니다. 다음으로 넘어갑니다.")
+                        error_count += 1
+                        continue
+
+                    팀원평가요약 = fetch_team_member_evaluation_summary(engine, current_team_evaluation_id)
+                    팀원상세평가 = fetch_team_members_detailed_evaluation(engine, current_team_evaluation_id)
+                    협업네트워크 = fetch_collaboration_matrix(engine, current_team_evaluation_id)
+                    
+                    중간평가리포트 = generate_middle_evaluation_report(
+                        팀평가기본데이터, 팀원평가요약, 팀원상세평가, 협업네트워크
+                    )
+
+                    if not validate_middle_report(중간평가리포트):
+                        print(f"   - ❌ 중간평가 리포트 데이터 검증 실패")
+                        error_count += 1
+                        continue
+
+                    save_middle_report_to_db(engine, current_team_evaluation_id, 중간평가리포트)
+                    success_count += 1
+
+                except Exception as e:
+                    print(f"⚠️ Team Evaluation ID {current_team_evaluation_id} 처리 중 심각한 오류 발생: {e}")
+                    import traceback
+                    traceback.print_exc()
+                    error_count += 1
+                    continue
+                time.sleep(0.5)
+
+            print(f"\n🎉 연말 중간평가 리포트 생성 완료!")
+            print(f"✅ 성공: {success_count}개")
+            print(f"❌ 실패: {error_count}개")
+            print(f"📊 총 처리: {len(target_team_evaluation_ids)}개")
                 
     except ValueError as e:
         print(f"설정 오류: {e}")
