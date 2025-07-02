@@ -417,7 +417,7 @@ def generate_middle_evaluation_report(
                     "핵심 협업자": member_data.get("key_collaborators", []),
                     "팀 내 역할": member_data.get("team_role", ""),
                     "Peer Talk 평가": member_data.get("peer_talk_summary", ""),
-                    "협업 편중도": f"{safe_convert_to_serializable(member_data.get('collaboration_bias', 0))}%",
+                    "협업 편중도": f"{safe_convert_to_serializable(member_data.get('collaboration_bias', 0))}",
                     "종합 평가": member_data.get("overall_evaluation", "")
                 })
     else:
@@ -566,7 +566,6 @@ def generate_middle_evaluation_report(
     
     # 최종 리포트 구성
     중간평가리포트 = {
-        "리포트_유형": f"연말 중간평가 리포트 (Period {팀평가기본데이터.period_id})",
         "기본_정보": 기본정보,
         "팀원_평가_요약표": 팀원평가요약표_섹션,
         "팀원별_평가_근거": 팀원별_평가근거
@@ -612,7 +611,7 @@ def validate_middle_report(report: dict) -> bool:
     중간평가 리포트 JSON 데이터의 필수 키 유효성을 검증합니다.
     """
     required_keys = [
-        "리포트_유형", "기본_정보", "팀원_평가_요약표", "팀원별_평가_근거"
+        "기본_정보", "팀원_평가_요약표", "팀원별_평가_근거"
     ]
     
     print(f"   - 🔍 연말 중간평가 리포트 검증 시작...")

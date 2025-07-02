@@ -10,8 +10,12 @@
 # =====================================
 # 전체 팀 평가 리포트 생성:
 #   python agents/report/run_quarterly_team_reports.py
-# 특정 팀 평가 ID만 리포트 생성 (예: ID 102):
-#   python agents/report/run_quarterly_team_reports.py --team_evaluation_id 102
+# 특정 분기만 리포트 생성 (예: 분기 2):
+#   python agents/report/run_quarterly_team_reports.py --period-id 2
+# 특정 팀만 리포트 생성 (예: 팀 1,2):
+#   python agents/report/run_quarterly_team_reports.py --teams 1,2
+# 특정 팀의 특정 분기만 리포트 생성:
+#   python agents/report/run_quarterly_team_reports.py --period-id 2 --teams 1,2
 # =====================================
 # 생성되는 리포트 구조
 # =====================================
