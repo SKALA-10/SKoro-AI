@@ -12,7 +12,7 @@ from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.messages import SystemMessage, HumanMessage, AIMessage
 from dotenv import load_dotenv
 
-from comparison_utils import get_comparison_result_detailed
+from agents.evaluation.modules.module_08_team_comparision.comparison_utils import *
 
 load_dotenv()
 
@@ -127,10 +127,9 @@ def call_llm_for_team_performance_comment(our_overall_rate: float, cluster_stats
     chain = prompt | llm_client
     
     try:
-        response: AIMessage = chain.invoke({})
+        response = chain.invoke({})
         content = str(response.content)
         return validate_comment_response(content)
-        
     except Exception as e:
         logger.error(f"LLM 호출 실패: {e}")
         # 폴백 코멘트

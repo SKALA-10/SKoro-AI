@@ -9,6 +9,7 @@ from typing import Dict, List, Optional, Any
 from sqlalchemy import create_engine, text
 from sqlalchemy.engine import Row
 from dotenv import load_dotenv
+from config.settings import *
 
 load_dotenv()
 
@@ -16,6 +17,7 @@ load_dotenv()
 current_dir = os.path.dirname(os.path.abspath(__file__))
 project_root = os.path.abspath(os.path.join(current_dir, '../../../../'))
 sys.path.append(project_root)
+
 from config.settings import DatabaseConfig
 
 db_config = DatabaseConfig()

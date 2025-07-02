@@ -1,14 +1,3 @@
-import sys
-import os
-
-current_dir = os.path.dirname(os.path.abspath(__file__))
-project_root = os.path.abspath(os.path.join(current_dir, '../../../../'))
-sys.path.append(project_root)
-
-# ================================================================
-# agent_module7.py - 모듈 7 LangGraph 에이전트 및 상태 관리
-# ================================================================
-
 from typing import Annotated, List, Literal, TypedDict, Dict, Optional
 from langchain_core.messages import HumanMessage 
 import operator
@@ -16,23 +5,13 @@ from langgraph.graph import StateGraph, START, END
 import json
 import statistics
 
-from db_utils import (
-    fetch_team_members,
-    fetch_team_achievement_data,
-    fetch_team_fourp_data,
-    fetch_team_quarterly_data,
-    batch_update_temp_evaluations
-)
+from agents.evaluation.modules.module_07_final_evaluation.db_utils import *
+from agents.evaluation.modules.module_07_final_evaluation.scoring_utils import *
+from agents.evaluation.modules.module_07_final_evaluation.llm_utils import *
 
-from scoring_utils import (
-    get_evaluation_weights_by_cl,
-    calculate_achievement_score_by_grade,
-    normalize_cl_group
-)
-
-from llm_utils import (
-    call_llm_for_normalized_evaluation_comments
-)
+# ================================================================
+# agent_module7.py - 모듈 7 LangGraph 에이전트 및 상태 관리
+# ================================================================
 
 # ================================================================
 # TeamModule7AgentState 정의 - 팀 단위 처리

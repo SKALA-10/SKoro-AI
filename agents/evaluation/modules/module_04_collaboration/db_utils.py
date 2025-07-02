@@ -1,9 +1,7 @@
 # ================================================================
-# db_utils_module3.py - 모듈 3 데이터베이스 관련 유틸리티
+# db_utils_module4.py - 모듈 4 데이터베이스 관련 유틸리티
 # ================================================================
 
-import sys
-import os
 import json
 from typing import Dict, List, Optional, Any
 from sqlalchemy import create_engine, text
@@ -12,11 +10,7 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-# DB 설정
-current_dir = os.path.dirname(os.path.abspath(__file__))
-project_root = os.path.abspath(os.path.join(current_dir, '../../../../'))
-sys.path.append(project_root)
-from config.settings import DatabaseConfig
+from config.settings import *
 
 db_config = DatabaseConfig()
 DATABASE_URL = db_config.DATABASE_URL
@@ -29,7 +23,7 @@ def row_to_dict(row: Row) -> Dict[str, Any]:
     return row._asdict()
 
 # ================================================================
-# 모듈 3 전용 DB 함수들
+# 모듈 4 전용 DB 함수들
 # ================================================================
 
 def fetch_collaboration_tasks_by_kpi(team_kpi_id: int, period_id: int) -> List[Dict]:

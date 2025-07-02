@@ -1,5 +1,5 @@
 # ================================================================
-# run_module3.py - 모듈 3 실행 파일
+# run_module3.py - 모듈 4 실행 파일
 # ================================================================
 
 import sys
@@ -9,8 +9,8 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(
 import argparse
 from typing import Literal, Optional
 
-from agent import Module3State, create_module3_graph
-from db_utils import fetch_team_tasks_and_kpis
+from agents.evaluation.modules.module_04_collaboration.agent import *
+from agents.evaluation.modules.module_04_collaboration.db_utils import *
 
 # ================================================================
 # 실행 함수들
@@ -18,7 +18,7 @@ from db_utils import fetch_team_tasks_and_kpis
 
 def run_module3_for_team_period(team_id: int, period_id: int, report_type: str, target_team_kpi_ids: Optional[list] = None):
     """
-    모듈 3 전체 워크플로우 실행 함수
+    모듈 4 전체 워크플로우 실행 함수
     Args:
         team_id: 팀 ID
         period_id: 평가 기간 ID (분기)
@@ -26,7 +26,7 @@ def run_module3_for_team_period(team_id: int, period_id: int, report_type: str, 
         target_team_kpi_ids: 평가 대상 KPI ID 리스트 (None이면 자동 조회)
     """
     print(f"\n============================")
-    print(f"[모듈3] 팀 {team_id}, 기간 {period_id} ({'연말' if report_type == 'annual' else '분기'}) 협업 분석 실행")
+    print(f"[모듈 4] 팀 {team_id}, 기간 {period_id} ({'연말' if report_type == 'annual' else '분기'}) 협업 분석 실행")
     print(f"============================\n")
     
     # KPI ID 자동 조회 (지정되지 않은 경우)
@@ -36,7 +36,7 @@ def run_module3_for_team_period(team_id: int, period_id: int, report_type: str, 
         kpi_ids = target_team_kpi_ids
     
     # State 생성
-    state = Module3State(
+    state = Module4State(
         report_type=report_type if report_type == "annual" else "quarterly",  # Literal 타입 보장
         team_id=team_id,
         period_id=period_id,
@@ -50,7 +50,7 @@ def run_module3_for_team_period(team_id: int, period_id: int, report_type: str, 
     )
     
     # 워크플로우 실행
-    module3_graph = create_module3_graph()
+    module3_graph = create_module4_graph()
     result = module3_graph.invoke(state)
     print(f"\n[완료] 팀 {team_id}, 기간 {period_id} 협업 분석 종료\n")
     return result
@@ -69,7 +69,7 @@ if __name__ == "__main__":
     }
     
     parser = argparse.ArgumentParser(description="Module3 Collaboration Runner")
-    parser.add_argument("--quarter", type=int, choices=[1,2,3,4], required=False, default=4, help="실행할 분기 (1,2,3,4). 기본값: 2")
+    parser.add_argument("--quarter", type=int, choices=[1,2,3,4], required=False, default=2, help="실행할 분기 (1,2,3,4). 기본값: 2")
     args = parser.parse_args()
     
     team_id = 1

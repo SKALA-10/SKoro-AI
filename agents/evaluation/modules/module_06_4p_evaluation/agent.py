@@ -6,24 +6,8 @@ from typing import Annotated, List, Literal, TypedDict, Dict, Optional, Any
 import operator
 from langgraph.graph import StateGraph, START, END
 
-from db_utils import (
-    fetch_employee_basic_info,
-    fetch_task_data_for_passionate,
-    fetch_task_data_for_proactive,
-    fetch_task_data_for_professional,
-    fetch_peer_talk_data,
-    fetch_collaboration_matrix_data,
-    save_quarterly_4p_results,
-    save_annual_4p_results
-)
-
-from llm_utils import (
-    load_and_cache_evaluation_criteria,
-    call_llm_for_passionate_evaluation,
-    call_llm_for_proactive_evaluation,
-    call_llm_for_professional_evaluation,
-    call_llm_for_people_evaluation
-)
+from agents.evaluation.modules.module_06_4p_evaluation.db_utils import *
+from agents.evaluation.modules.module_06_4p_evaluation.llm_utils import *
 
 
 # ================================================================
@@ -63,7 +47,6 @@ def initialize_evaluation_criteria_agent(state: Module6AgentState) -> Dict:
         parsed_criteria = load_and_cache_evaluation_criteria()
         
         # 파일 캐시에서 raw_text도 가져오기
-        from llm_utils import load_cache_from_file
         cache_data = load_cache_from_file()
         raw_text = cache_data.get("raw_text", "")
         
@@ -289,9 +272,14 @@ def bars_integration_submodule(state: Module6AgentState) -> Dict:
 
 
 def quarterly_format_and_save_submodule(state: Module6AgentState) -> Dict:
-    """분기 저장 서브모듈 - 수정됨"""
-    
+    """
+    분기 저장 서브모듈 - 수정
+    """
     feedback_report_id = state.get("feedback_report_id")
+    if not feedback_report_id:
+        # team_id, period_id, emp_no로 DB에서 조회
+        from .db_utils import fetch_feedback_report_id
+        feedback_report_id = fetch_feedback_report_id(state["team_id"], state["period_id"], state["emp_no"])
     integrated_result = state.get("integrated_data", {}).get("integrated_4p_result", {})
 
     print(f"분기 결과 저장 시작: feedback_report_id={feedback_report_id}")
@@ -313,6 +301,11 @@ def annual_format_and_save_submodule(state: Module6AgentState) -> Dict:
     """연말 저장 서브모듈 - 수정됨"""
     
     final_evaluation_report_id = state.get("final_evaluation_report_id")
+    if not final_evaluation_report_id:
+        # team_id, period_id, emp_no로 DB에서 조회
+        from .db_utils import fetch_final_evaluation_report_id
+        final_evaluation_report_id = fetch_final_evaluation_report_id(state["team_id"], state["period_id"], state["emp_no"])
+    
     integrated_result = state.get("integrated_data", {}).get("integrated_4p_result", {})
 
     print(f"연말 결과 저장 시작: final_evaluation_report_id={final_evaluation_report_id}")

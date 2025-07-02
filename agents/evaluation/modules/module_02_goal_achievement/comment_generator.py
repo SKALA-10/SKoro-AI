@@ -7,9 +7,9 @@ from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.messages import SystemMessage, HumanMessage
 from langchain_openai import ChatOpenAI
 
-from llm_utils import robust_llm_call
-from db_utils import fetch_team_members, fetch_team_kpi_data
-from calculation_utils import calculate_team_average_achievement_rate
+from agents.evaluation.modules.module_02_goal_achievement.llm_utils import *
+from agents.evaluation.modules.module_02_goal_achievement.db_utils import *
+from agents.evaluation.modules.module_02_goal_achievement.calculation_utils import *
 
 # LLM 클라이언트 설정
 llm_client = ChatOpenAI(model="gpt-4o-mini", temperature=0)

@@ -2,25 +2,19 @@
 # run_module7.py - 모듈 7 실행 파일
 # ================================================================
 
-from typing import List
+from typing import List, Optional
 from langchain_core.messages import HumanMessage
 
-from agent import TeamModule7AgentState, create_team_module7_graph
-from db_utils import get_all_teams_with_data
-from scoring_utils import preview_achievement_scoring
+from agents.evaluation.modules.module_07_final_evaluation.agent import TeamModule7AgentState, create_team_module7_graph
+from agents.evaluation.modules.module_07_final_evaluation.db_utils import get_all_teams_with_data
+from agents.evaluation.modules.module_07_final_evaluation.scoring_utils import preview_achievement_scoring
+from agents.evaluation.modules.module_07_final_evaluation.llm_utils import *
 from sqlalchemy import create_engine, text
-import sys
-import os
 from dotenv import load_dotenv
-
-current_dir = os.path.dirname(os.path.abspath(__file__))
-project_root = os.path.abspath(os.path.join(current_dir, '../../../../'))
-sys.path.append(project_root)
 
 load_dotenv()
 
-# DB 설정
-from config.settings import DatabaseConfig
+from config.settings import *
 
 db_config = DatabaseConfig()
 DATABASE_URL = db_config.DATABASE_URL
@@ -125,7 +119,7 @@ def run_module7_evaluation(emp_no: str, period_id: int = 4):
 # 테스트 및 디버깅 함수들
 # ================================================================
 
-def test_team_module7(team_id: str = None, period_id: int = 4):
+def test_team_module7(team_id: Optional[str] = None, period_id: int = 4):
     """팀 모듈 7 + SK 등급 기반 절대평가 + CL 정규화 테스트"""
     if not team_id:
         teams = get_all_teams_with_data(period_id)

@@ -6,37 +6,10 @@ import logging
 from typing import Dict, List, Optional, Any, Literal, TypedDict
 from langgraph.graph import StateGraph, START, END
 
-from db_utils import (
-    fetch_team_evaluation_id,
-    fetch_team_members,
-    fetch_cumulative_task_data,
-    fetch_team_kpi_data,
-    fetch_kpi_tasks,
-    check_evaluation_type,
-    update_task_summary,
-    update_team_kpi,
-    save_feedback_report,
-    save_final_evaluation_report,
-    update_team_evaluations,
-    calculate_year_over_year_growth
-)
-
-from calculation_utils import (
-    calculate_individual_weighted_achievement_rate,
-    calculate_quantitative_contributions,
-    calculate_team_average_achievement_rate
-)
-
-from llm_utils import (
-    batch_calculate_achievement_and_grades,
-    calculate_qualitative_contributions,
-    calculate_team_kpi_achievement_rate
-)
-
-from comment_generator import (
-    generate_team_consistency_guide,
-    CommentGenerator
-)
+from agents.evaluation.modules.module_02_goal_achievement.db_utils import *
+from agents.evaluation.modules.module_02_goal_achievement.calculation_utils import *
+from agents.evaluation.modules.module_02_goal_achievement.llm_utils import *
+from agents.evaluation.modules.module_02_goal_achievement.comment_generator import *
 
 # 로깅 설정
 logger = logging.getLogger(__name__)
@@ -407,6 +380,8 @@ def generate_task_comments_unified(state: Module2State):
 
 def generate_individual_summary_comments_unified(state: Module2State):
     """개인 종합 코멘트 생성 (통합 시스템)"""
+    if 'feedback_report_ids' not in state or state['feedback_report_ids'] is None:
+        state['feedback_report_ids'] = []
     team_members = fetch_team_members(state['team_id'])
     period_type = "annual" if state['report_type'] == "annual" else "quarterly"
     
@@ -453,6 +428,8 @@ def generate_individual_summary_comments_unified(state: Module2State):
 
 def generate_team_overall_comment_unified(state: Module2State):
     """팀 전체 분석 코멘트 생성 (통합 시스템)"""
+    if 'final_evaluation_report_ids' not in state or state['final_evaluation_report_ids'] is None:
+        state['final_evaluation_report_ids'] = []
     # 팀 KPI 데이터 수집
     team_kpis_data = []
     for kpi_id in state['target_team_kpi_ids']:
@@ -480,7 +457,6 @@ def db_update_submodule(state: Module2State) -> Module2State:
     print(f"   💾 최종 DB 업데이트 중...")
     
     try:
-        from db_utils import engine
         with engine.begin() as transaction:
             # 이미 각 서브모듈에서 업데이트했으므로 최종 검증만 수행
             
@@ -706,7 +682,6 @@ def validate_final_update_results(state: Module2State) -> Dict[str, Any]:
         
         # 3. Team evaluation 검증
         if state['team_evaluation_id']:
-            from db_utils import engine
             with engine.connect() as connection:
                 query_text = """
                     SELECT average_achievement_rate, ai_team_overall_analysis_comment,
@@ -718,7 +693,6 @@ def validate_final_update_results(state: Module2State) -> Dict[str, Any]:
                 query = text(query_text)
                 result = connection.execute(query, {"team_evaluation_id": state['team_evaluation_id']})
                 row = result.fetchone()
-                from db_utils import row_to_dict
                 team_eval = row_to_dict(row) if row else {}
                 
                 if team_eval.get('average_achievement_rate') is None:
@@ -739,13 +713,16 @@ def validate_final_update_results(state: Module2State) -> Dict[str, Any]:
             print(f"        • 팀원 수: {ranking_validation['team_member_count']}명")
         
         # 5. 레포트 검증
-        if state['report_type'] == "quarterly" and state['feedback_report_ids']:
-            for report_id in state['feedback_report_ids']:
+        feedback_report_ids = state.get('feedback_report_ids') or []
+        final_evaluation_report_ids = state.get('final_evaluation_report_ids') or []
+        
+        if state['report_type'] == "quarterly" and feedback_report_ids:
+            for report_id in feedback_report_ids:
                 # feedback_reports 검증 로직
                 pass
         
-        elif state['report_type'] == "annual" and state['final_evaluation_report_ids']:
-            for report_id in state['final_evaluation_report_ids']:
+        elif state['report_type'] == "annual" and final_evaluation_report_ids:
+            for report_id in final_evaluation_report_ids:
                 # final_evaluation_reports 검증 로직
                 pass
         
@@ -787,7 +764,6 @@ def validate_team_ranking_data(state: Module2State) -> Dict[str, Any]:
     warnings = []
     
     try:
-        from db_utils import engine
         from sqlalchemy import text
         with engine.connect() as connection:
             # feedback_reports에서 순위 데이터 조회
@@ -798,7 +774,6 @@ def validate_team_ranking_data(state: Module2State) -> Dict[str, Any]:
                 ORDER BY ranking
             """)
             results = connection.execute(query, {"team_evaluation_id": state['team_evaluation_id']})
-            from db_utils import row_to_dict
             ranking_data = [row_to_dict(row) for row in results]
             
             if not ranking_data:
@@ -890,7 +865,6 @@ def validate_data_consistency(state: Module2State) -> List[str]:
         
         # 3. 팀 평균 달성률과 개별 달성률 일관성 검증
         if state['team_evaluation_id']:
-            from db_utils import engine
             from sqlalchemy import text
             with engine.connect() as connection:
                 query = text("""

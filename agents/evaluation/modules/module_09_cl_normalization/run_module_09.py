@@ -2,18 +2,10 @@
 # run_module9.py - 모듈 9 실행 파일
 # ================================================================
 
-import sys
-import os
-
-current_dir = os.path.dirname(os.path.abspath(__file__))
-project_root = os.path.abspath(os.path.join(current_dir, '../../../../'))
-sys.path.append(project_root)
-
 from typing import List, Optional
 from langchain_core.messages import HumanMessage
-
-from agent import HeadquarterModule9AgentState, create_headquarter_module9_graph
-from db_utils import get_all_headquarters_with_data, get_all_headquarters_info
+from agents.evaluation.modules.module_09_cl_normalization.agent import *
+from agents.evaluation.modules.module_09_cl_normalization.db_utils import *
 
 # ================================================================
 # 실행 함수들

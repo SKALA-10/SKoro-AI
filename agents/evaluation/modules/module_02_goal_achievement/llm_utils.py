@@ -6,14 +6,14 @@ import re
 import json
 import time
 import logging
-from typing import Dict, List
+from typing import Dict, List, Any
 from langchain_openai import ChatOpenAI
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.messages import SystemMessage, HumanMessage
 from dotenv import load_dotenv
 
-from calculation_utils import get_evaluation_criteria
-from db_utils import fetch_team_kpi_data, update_team_kpi
+from agents.evaluation.modules.module_02_goal_achievement.calculation_utils import *
+from agents.evaluation.modules.module_02_goal_achievement.db_utils import *
 
 load_dotenv()
 
@@ -210,7 +210,7 @@ def batch_calculate_achievement_and_grades(batch_data: List[Dict], include_grade
                 if not isinstance(rate, (int, float)) or not (0 <= rate <= 200):
                     rate = 80.0  # 기본값
                 
-                validated_result: Dict[str, any] = {"achievement_rate": round(float(rate), 2)}
+                validated_result: Dict[str, Any] = {"achievement_rate": round(float(rate), 2)}
                 
                 if include_grades:
                     grade = result.get("grade", "C")
@@ -227,7 +227,7 @@ def batch_calculate_achievement_and_grades(batch_data: List[Dict], include_grade
             # 기본값으로 폴백
             fallback_results = []
             for _ in batch_data:
-                result: Dict[str, any] = {"achievement_rate": 80.0}
+                result: Dict[str, Any] = {"achievement_rate": 80.0}
                 if include_grades:
                     result["grade"] = "C"
                 fallback_results.append(result)
@@ -237,7 +237,7 @@ def batch_calculate_achievement_and_grades(batch_data: List[Dict], include_grade
 
 def calculate_qualitative_contributions(kpi_id: int, period_id: int, kpi_data: Dict) -> Dict[str, float]:
     """정성 평가 기여도 계산 - 우리가 상의한 grade_rule 기반"""
-    from db_utils import fetch_kpi_tasks
+    from agents.evaluation.modules.module_02_goal_achievement.db_utils import fetch_kpi_tasks
     
     tasks = fetch_kpi_tasks(kpi_id, period_id)
     evaluation_criteria = get_evaluation_criteria(kpi_id)
@@ -294,7 +294,7 @@ def calculate_qualitative_contributions(kpi_id: int, period_id: int, kpi_data: D
 
 def calculate_team_kpi_achievement_rate(kpi_id: int, period_id: int, kpi_data: Dict) -> Dict:
     """팀 KPI 달성률 LLM 계산"""
-    from db_utils import fetch_kpi_tasks
+    from agents.evaluation.modules.module_02_goal_achievement.db_utils import fetch_kpi_tasks
     
     tasks = fetch_kpi_tasks(kpi_id, period_id)
     

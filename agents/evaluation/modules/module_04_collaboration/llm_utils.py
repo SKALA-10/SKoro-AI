@@ -1,5 +1,5 @@
 # ================================================================
-# llm_utils_module3.py - 모듈 3 LLM 관련 유틸리티
+# llm_utils_module4.py - 모듈 4 LLM 관련 유틸리티
 # ================================================================
 
 import re
@@ -11,6 +11,8 @@ from langchain_core.messages import HumanMessage, SystemMessage, AIMessage
 from dotenv import load_dotenv
 
 load_dotenv()
+
+from agents.evaluation.modules.module_04_collaboration.db_utils import *
 
 # LLM 클라이언트 초기화
 llm_client = ChatOpenAI(model="gpt-4o-mini", temperature=0)

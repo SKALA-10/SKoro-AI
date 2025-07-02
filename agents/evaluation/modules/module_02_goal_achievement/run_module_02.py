@@ -4,13 +4,13 @@
 
 import sys
 import os
-sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))))
+sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))) )
 
 import argparse
 from typing import Literal
 
-from agent import Module2State, create_module2_graph
-from db_utils import fetch_team_tasks_and_kpis
+from agents.evaluation.modules.module_02_goal_achievement.agent import *
+from agents.evaluation.modules.module_02_goal_achievement.db_utils import *
 
 # ================================================================
 # 실행 함수들

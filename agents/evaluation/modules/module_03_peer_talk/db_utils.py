@@ -5,12 +5,6 @@ from typing import Optional, List, Dict, Any
 from collections import defaultdict
 import json
 
-import sys
-import os
-current_dir = os.path.dirname(os.path.abspath(__file__))
-project_root = os.path.abspath(os.path.join(current_dir, '../../../../'))
-sys.path.append(project_root)
-
 from config.settings import DatabaseConfig
 
 db_config = DatabaseConfig()
@@ -26,7 +20,7 @@ def row_to_dict(row: Row) -> Dict[str, Any]:
     return row._asdict() # ._asdict() 사용
 
 
-# --- 모듈 4 전용 데이터 조회 함수들 ---
+# --- 모듈 3 전용 데이터 조회 함수들 ---
 
 def fetch_peer_evaluations_for_target(period_id: int, target_emp_no: str) -> List[Dict]:
     """
@@ -171,7 +165,27 @@ def get_team_evaluation_id_by_emp_and_period(emp_no: str, period_id: int) -> Opt
         return row_to_dict(result)["team_evaluation_id"] if result else None
 
 
-# --- 모듈 4 전용 DB 저장 함수들 ---
+def fetch_feedback_report_id(team_id: int, period_id: int, emp_no: str) -> Optional[int]:
+    """
+    team_id, period_id, emp_no로 feedback_report_id를 조회
+    """
+    from agents.evaluation.modules.module_02_goal_achievement.db_utils import fetch_team_evaluation_id
+    team_evaluation_id = fetch_team_evaluation_id(team_id, period_id)
+    if not team_evaluation_id:
+        return None
+    with engine.connect() as connection:
+        query = text("""
+            SELECT feedback_report_id FROM feedback_reports
+            WHERE team_evaluation_id = :team_evaluation_id AND emp_no = :emp_no
+        """)
+        result = connection.execute(query, {
+            "team_evaluation_id": team_evaluation_id,
+            "emp_no": emp_no
+        })
+        return result.scalar_one_or_none()
+
+
+# --- 모듈 3 전용 DB 저장 함수들 ---
 
 def format_peer_evaluation_result(strengths: List[str], concerns: List[str], collaboration_observations: List[str]) -> str:
     """강점, 우려, 협업관찰을 JSON 문자열로 포맷팅"""

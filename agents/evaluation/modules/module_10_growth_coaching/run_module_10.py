@@ -5,12 +5,8 @@
 from typing import Optional, List, Dict
 from langchain_core.messages import HumanMessage
 
-from agent import Module10AgentState, create_module10_graph
-from db_utils import (
-    get_teams_with_data,
-    clean_ai_team_coaching_data,
-    clean_all_team_coaching_data
-)
+from agents.evaluation.modules.module_10_growth_coaching.agent import Module10AgentState, create_module10_graph
+from agents.evaluation.modules.module_10_growth_coaching.db_utils import *
 
 from sqlalchemy import create_engine, text
 import sys
@@ -20,9 +16,6 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # DB 설정
-current_dir = os.path.dirname(os.path.abspath(__file__))
-project_root = os.path.abspath(os.path.join(current_dir, '../../../../'))
-sys.path.append(project_root)
 from config.settings import DatabaseConfig
 
 db_config = DatabaseConfig()
@@ -89,9 +82,9 @@ def run_team_module10_evaluation(team_id: str, period_id: int, report_type: str 
     
     print(f"🚀 팀 단위 모듈 10 실행: {team_id} ({report_type})")
     
-    # 팀원 목록 조회
+    # 팀원 목록 조회 (팀장 제외)
     with engine.connect() as connection:
-        query = text("SELECT emp_no, emp_name FROM employees WHERE team_id = :team_id")
+        query = text("SELECT emp_no, emp_name FROM employees WHERE team_id = :team_id AND role != 'MANAGER'")
         results = connection.execute(query, {"team_id": team_id}).fetchall()
         team_members = [{"emp_no": row[0], "emp_name": row[1]} for row in results]
     
@@ -225,4 +218,10 @@ if __name__ == "__main__":
     # test_module10()
     
     # 실제 실행 예시
+    run_module10_evaluation('SK0002', 2, 'quarterly')
+    run_module10_evaluation('SK0003', 2, 'quarterly')
+    run_module10_evaluation('SK0004', 2, 'quarterly')
+
     run_module10_evaluation('SK0002', 4, 'annual')
+    run_module10_evaluation('SK0003', 4, 'annual')
+    run_module10_evaluation('SK0004', 4, 'annual')

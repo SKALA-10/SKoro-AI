@@ -1,4 +1,4 @@
-from db_utils import *
+from agents.evaluation.modules.module_03_peer_talk.db_utils import *
 
 import re
 import json 
@@ -59,7 +59,7 @@ def get_keyword_score(keyword: str, positive_keywords: set, negative_keywords: s
         return 0.0
 
 
-# --- 모듈 4 전용 LLM 호출 함수들 ---
+# --- 모듈 3 전용 LLM 호출 함수들 ---
 
 def call_llm_for_peer_evaluation_context(keywords: str, work_situation: str, weight: float) -> Dict:
     """동료평가 맥락 문장 생성"""
@@ -96,10 +96,10 @@ def call_llm_for_peer_evaluation_context(keywords: str, work_situation: str, wei
     chain = prompt | llm_client
 
     try:
-        response: AIMessage = chain.invoke({"keywords": keywords, "work_situation": work_situation, "weight": weight})
+        response = chain.invoke({"keywords": keywords, "work_situation": work_situation, "weight": weight})
         json_output_raw = response.content
 
-        json_output = _extract_json_from_llm_response(json_output_raw)
+        json_output = _extract_json_from_llm_response(str(json_output_raw))
 
         llm_parsed_data = json.loads(json_output)
 
@@ -232,14 +232,14 @@ def call_llm_for_final_feedback_generation(weighted_analysis: Dict, top_sentence
     chain = prompt | llm_client
 
     try:
-        response: AIMessage = chain.invoke({
+        response = chain.invoke({
             "weighted_analysis": weighted_analysis, 
             "top_sentences": top_sentences, 
             "target_emp_no": target_emp_no
         })
         json_output_raw = response.content
         
-        json_output = _extract_json_from_llm_response(json_output_raw)
+        json_output = _extract_json_from_llm_response(str(json_output_raw))
         
         llm_parsed_data = json.loads(json_output)
         

@@ -7,26 +7,8 @@ from langchain_core.messages import HumanMessage
 import operator
 from langgraph.graph import StateGraph, START, END
 
-from db_utils import (
-    fetch_basic_info,
-    fetch_performance_data,
-    fetch_peer_talk_data,
-    fetch_fourp_data,
-    fetch_collaboration_data,
-    fetch_module7_score_data,
-    fetch_module9_final_score_data,
-    calculate_ranking_by_achievement,
-    save_individual_result,
-    save_manager_result
-)
-
-from llm_utils import (
-    call_llm_for_growth_analysis,
-    call_llm_for_focus_coaching_analysis,
-    call_llm_for_individual_result,
-    call_llm_for_overall_comment,
-    call_llm_for_manager_result
-)
+from agents.evaluation.modules.module_10_growth_coaching.db_utils import *
+from agents.evaluation.modules.module_10_growth_coaching.llm_utils import *
 
 # ================================================================
 # Module10AgentState 정의

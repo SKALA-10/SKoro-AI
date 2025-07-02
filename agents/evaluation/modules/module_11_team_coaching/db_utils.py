@@ -9,12 +9,6 @@ from sqlalchemy import create_engine, text
 from sqlalchemy.engine import Row
 from sqlalchemy.exc import OperationalError
 
-
-# 프로젝트 루트 경로 추가
-current_dir = os.path.dirname(os.path.abspath(__file__))
-project_root = os.path.abspath(os.path.join(current_dir, '../../../../'))
-sys.path.append(project_root)
-
 # 기존 프로젝트의 DatabaseConfig 사용
 from config.settings import DatabaseConfig
 

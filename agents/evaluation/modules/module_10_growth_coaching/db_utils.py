@@ -13,9 +13,6 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # DB 설정
-current_dir = os.path.dirname(os.path.abspath(__file__))
-project_root = os.path.abspath(os.path.join(current_dir, '../../../../'))
-sys.path.append(project_root)
 from config.settings import DatabaseConfig
 
 db_config = DatabaseConfig()
@@ -233,27 +230,18 @@ def calculate_ranking_by_achievement(emp_no: str, team_id: str, period_id: int, 
     with engine.connect() as connection:
         try:
             if report_type == "quarterly":
-                # 분기 랭킹: task_summaries의 ai_achievement_rate 평균 기준
+                # 분기: feedback_reports의 ranking 컬럼값을 그대로 사용
                 query = text("""
-                    WITH team_achievements AS (
-                        SELECT
-                            e.emp_no,
-                            COALESCE(AVG(ts.ai_achievement_rate), 0) as achievement_rate
-                        FROM employees e
-                        LEFT JOIN (
-                            SELECT t.emp_no, ts.ai_achievement_rate
-                            FROM tasks t
-                            JOIN task_summaries ts ON t.task_id = ts.task_id
-                            WHERE ts.period_id = :period_id
-                        ) ts ON e.emp_no = ts.emp_no
-                        WHERE e.team_id = :team_id
-                        GROUP BY e.emp_no
-                    )
-                    SELECT
-                        emp_no,
-                        RANK() OVER (ORDER BY achievement_rate DESC) as ranking
-                    FROM team_achievements
+                    SELECT ranking
+                    FROM feedback_reports fr
+                    JOIN team_evaluations te ON fr.team_evaluation_id = te.team_evaluation_id
+                    WHERE fr.emp_no = :emp_no AND te.period_id = :period_id
                 """)
+                result = connection.execute(query, {"emp_no": emp_no, "period_id": period_id}).fetchone()
+                if result and result.ranking is not None:
+                    return int(result.ranking)
+                else:
+                    return 0
             else:  # annual
                 # 연간 랭킹: final_evaluation_reports의 ai_annual_achievement_rate 기준
                 query = text("""
@@ -275,16 +263,12 @@ def calculate_ranking_by_achievement(emp_no: str, team_id: str, period_id: int, 
                         RANK() OVER (ORDER BY achievement_rate DESC) as ranking
                     FROM team_achievements
                 """)
-
-            params = {"team_id": team_id, "period_id": period_id}
-            rank_list = connection.execute(query, params).fetchall()
-
-            for row in rank_list:
-                if row[0] == emp_no:
-                    return int(row[1]) if row[1] is not None else 0
-
-            return 0
-
+                params = {"team_id": team_id, "period_id": period_id}
+                rank_list = connection.execute(query, params).fetchall()
+                for row in rank_list:
+                    if row[0] == emp_no:
+                        return int(row[1]) if row[1] is not None else 0
+                return 0
         except Exception as e:
             print(f"달성률 기반 순위 계산 실패: {e}")
             return 0
@@ -392,6 +376,15 @@ def save_manager_result(emp_no: str, period_id: int, manager_result: Dict) -> bo
             # 새 데이터 추가
             existing_data["general_coaching"].extend(manager_result["general_coaching"])
             existing_data["focused_coaching"].extend(manager_result["focused_coaching"])
+
+            # 정렬: general_coaching은 ranking 오름차순, focused_coaching은 ranking 내림차순
+            def get_ranking(item, default):
+                try:
+                    return int(item.get("ranking", default))
+                except Exception:
+                    return default
+            existing_data["general_coaching"].sort(key=lambda x: get_ranking(x, 9999))
+            existing_data["focused_coaching"].sort(key=lambda x: get_ranking(x, 0), reverse=True)
             
             # DB 업데이트
             update_query = text("""

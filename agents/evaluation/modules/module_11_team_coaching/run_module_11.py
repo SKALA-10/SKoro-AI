@@ -7,9 +7,9 @@ import logging
 from datetime import datetime
 from typing import Dict, Any, Optional, List
 
-from db_utils import init_database, DatabaseError
-from agent import Module11TeamRiskManagementAgent, Module11AgentState
-from llm_utils import parse_json_field
+from agents.evaluation.modules.module_11_team_coaching.db_utils import *
+from agents.evaluation.modules.module_11_team_coaching.agent import *
+from agents.evaluation.modules.module_11_team_coaching.llm_utils import *
 
 # 로깅 설정
 logging.basicConfig(
@@ -109,7 +109,7 @@ async def test_individual_components():
             return None
         
         # 실제 Module11AgentState 사용
-        from agent import Module11AgentState
+        from agents.evaluation.modules.module_11_team_coaching.agent import Module11AgentState
         state = Module11AgentState(
             team_id=1,
             period_id=found_period_id,
@@ -506,19 +506,16 @@ def find_team_evaluation_id_for_team_1():
 # ====================================
 
 if __name__ == "__main__":
-    # team_id=1용 데이터 찾기
-    print("🔍 team_id=1용 데이터 검색 중...")
-    found_team_evaluation_id, found_period_id = find_team_evaluation_id_for_team_1()
-    if found_team_evaluation_id is not None and found_period_id is not None:
-        # 찾은 데이터로 실행
-        print(f"✅ 데이터 발견: team_evaluation_id={found_team_evaluation_id}, period_id={found_period_id}")
-        print("🚀 Module 11 실행 시작")
-        result = asyncio.run(run_module_11(1, found_period_id, found_team_evaluation_id))
-        print(f"✅ 실행 완료: {result}")
-        # 통합 테스트도 실행하고 싶으면 아래 주석 해제
-        # test_result = asyncio.run(test_improved_module11(1, found_period_id, found_team_evaluation_id))
-        # 전체 테스트 실행하고 싶으면 아래 주석 해제
-        # all_test_results = asyncio.run(run_all_tests(1, found_period_id, found_team_evaluation_id))
-    else:
-        print("❌ team_id=1에 해당하는 데이터를 찾을 수 없습니다.")
-        print("다른 team_id를 사용하거나 데이터를 확인해주세요.")
+    # team_id=1의 2분기와 연말 평가를 각각 실행
+    test_cases = [
+        {"label": "2분기", "team_id": 1, "period_id": 2, "team_evaluation_id": 102},
+        {"label": "연말", "team_id": 1, "period_id": 4, "team_evaluation_id": 104},
+    ]
+    for case in test_cases:
+        print(f"\n==============================")
+        print(f"🚩 {case['label']} 실행 시작 (team_id={case['team_id']}, period_id={case['period_id']}, team_evaluation_id={case['team_evaluation_id']})")
+        try:
+            result = asyncio.run(run_module_11(case['team_id'], case['period_id'], case['team_evaluation_id']))
+            print(f"✅ {case['label']} 실행 완료: {result}")
+        except Exception as e:
+            print(f"❌ {case['label']} 실행 실패: {str(e)}")
