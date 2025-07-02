@@ -8,6 +8,7 @@ feedback_reports.report 컬럼에 저장합니다.
 사용법:
     python agents/report/run_quarterly_individual_reports.py                    # 모든 직원 처리
     python agents/report/run_quarterly_individual_reports.py --emp_no SK0002   # 특정 직원만 처리
+    python agents/report/run_quarterly_individual_reports.py --emp_no SK0002 --period-id 2
 """
 
 import sys
