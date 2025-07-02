@@ -85,10 +85,16 @@ def clear_existing_feedback_reports(engine: Engine, teams: Optional[list] = None
 
 def fetch_team_emp_nos(engine: Engine, teams: list) -> list:
     """
-    특정 팀들의 직원 번호를 조회합니다.
+    특정 팀들의 직원 번호를 조회합니다. (팀장 제외)
     """
     placeholders = ','.join([':team_id_' + str(i) for i in range(len(teams))])
-    query = text(f"SELECT DISTINCT emp_no FROM employees WHERE team_id IN ({placeholders}) ORDER BY emp_no;")
+    query = text(f"""
+        SELECT DISTINCT emp_no 
+        FROM employees 
+        WHERE team_id IN ({placeholders}) 
+        AND role != 'MANAGER'  # 팀장 제외
+        ORDER BY emp_no;
+    """)
     params = {f'team_id_{i}': team_id for i, team_id in enumerate(teams)}
     with engine.connect() as connection:
         results = connection.execute(query, params).fetchall()
@@ -98,9 +104,15 @@ def fetch_team_emp_nos(engine: Engine, teams: list) -> list:
 
 def fetch_all_feedback_report_ids(engine: Engine) -> List[str]:
     """
-    feedback_reports 테이블에서 모든 직원 번호를 조회합니다.
+    feedback_reports 테이블에서 모든 직원 번호를 조회합니다. (팀장 제외)
     """
-    query = text("SELECT DISTINCT emp_no FROM feedback_reports ORDER BY emp_no;")
+    query = text("""
+        SELECT DISTINCT fr.emp_no 
+        FROM feedback_reports fr
+        JOIN employees e ON fr.emp_no = e.emp_no
+        WHERE e.role != 'MANAGER'  # 팀장 제외
+        ORDER BY fr.emp_no;
+    """)
     with engine.connect() as connection:
         results = connection.execute(query).fetchall()
     emp_nos = [row[0] for row in results]
