@@ -125,7 +125,7 @@ async def retrieve_data_node(state: AgentState) -> AgentState:
     db_session: AsyncSession = state["config"]["db_session"]
     team_id = state["team_id"]
 
-    current_year = 2024
+    current_year = date.today().year
 
     emp_res = await db_session.execute(
         select(Employee.emp_no, Employee.salary, Employee.cl, Employee.position)
@@ -206,9 +206,11 @@ async def generate_personalized_kpis_node(state: AgentState) -> AgentState:
     print("Executing generate_personalized_kpis_node...")
     structured_llm = llm.with_structured_output(FinalKpiResult)
 
+    current_year = date.today().year
+
     prompt = ChatPromptTemplate.from_messages([
         ("system", """
-        당신은 유능한 HR 리더입니다. 아래 제공된 직원의 정보와 그에게 할당된 팀 목표들을 바탕으로, 2024년 개인 성과 목표(KPI) 세트를 생성해주세요.
+        당신은 유능한 HR 리더입니다. 아래 제공된 직원의 정보와 그에게 할당된 팀 목표들을 바탕으로, {year}년 개인 성과 목표(KPI) 세트를 생성해주세요.
 
         [규칙]
         1. 할당된 각 팀 목표(`assigned_team_kpis`)에 대해 개인화된 KPI를 1개씩 생성합니다.
@@ -243,6 +245,7 @@ async def generate_personalized_kpis_node(state: AgentState) -> AgentState:
         if not assigned_kpis: continue
 
         response = await (prompt | structured_llm).ainvoke({
+            "year": current_year,
             "employee_profile": state["employee_profiles"][emp_no],
             "past_kpis": state["past_kpis_by_emp"].get(emp_no, []),
             "assigned_team_kpis": assigned_kpis,
