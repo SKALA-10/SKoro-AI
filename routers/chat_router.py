@@ -7,7 +7,7 @@ router = APIRouter()
 chat_service = ChatService() 
 
 # 챗봇 SKoro와 대화
-@router.post("/skoro", response_model=ChatResponse)
+@router.post("/skoro", response_model=ChatResponse, summary="SKoro와 대화")
 def chat_with_skoro(request: ChatRequest):
 
     response_dict = chat_service.chat_with_skoro(request)

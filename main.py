@@ -1,7 +1,6 @@
 from fastapi import FastAPI, APIRouter
 from fastapi.middleware.cors import CORSMiddleware
-from routers import feedback_report_router, final_evaluation_report_router, team_evaluation_router, \
-    evaluation_feedback_router, chat_router, kpi_generator_router
+from routers import evaluation_router, chat_router, kpi_generator_router
 
 app = FastAPI(
     title="SKoro-AI API",
@@ -14,7 +13,11 @@ app = FastAPI(
 # CORS 설정
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"], # url 설정
+    allow_origins=[
+        "https://skoro.skala25a.project.skala-ai.com",
+        "http://localhost:3000",
+        "http://localhost:8000"
+    ], # url 설정
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -23,10 +26,8 @@ app.add_middleware(
 # 라우터
 api_router = APIRouter()
 
-api_router.include_router(feedback_report_router.router)
-api_router.include_router(final_evaluation_report_router.router)
-api_router.include_router(team_evaluation_router.router, prefix="/team-evaluation")
-api_router.include_router(evaluation_feedback_router.router, prefix="/evaluation-feedback")
+api_router.include_router(evaluation_router.router, prefix="/evaluation")
+# api_router.include_router(evaluation_feedback_summary_router.router, prefix="/evaluation-feedback-summary")
 api_router.include_router(chat_router.router, prefix="/chat")
 api_router.include_router(kpi_generator_router.router, prefix="/kpi")
 

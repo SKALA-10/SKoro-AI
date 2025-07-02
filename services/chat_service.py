@@ -1,5 +1,5 @@
 from schemas.chat import ChatRequest, ChatResponse
-from agents.evaluation.modules.chatbot.main_chatbot import SKChatbot
+from agents.chatbot.main_chatbot import SKChatbot
 
 class ChatService:
     def __init__(self):
