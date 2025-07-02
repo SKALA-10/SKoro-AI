@@ -233,19 +233,23 @@ def run_phase3_all_modules(period_id: int, teams):
     asyncio.run(run_module11_for_all_teams())
     logging.info("Phase3: 완료")
 
-def run_phase4_individual_reports(period_id: int, teams):
+def run_phase4_reports(period_id: int, teams):
     """
-    Phase4: 개인별 리포트 생성
+    Phase4: 개인별 리포트 → 팀별 리포트 순서로 생성
     """
-    logging.info("Phase4: 개인별 리포트 생성 시작")
+    logging.info("Phase4: 리포트 생성 시작")
+    
+    # 1. 개인별 리포트 생성
+    logging.info("[Phase4] 개인별 리포트 생성 시작")
     from agents.report.quarterly_individual_reports import main as generate_individual_reports
-    if teams:
-        logging.info(f"[Phase4] 지정된 팀 {teams}의 개인별 리포트 생성 시작")
-        generate_individual_reports(period_id=period_id, teams=teams)
-    else:
-        logging.info("[Phase4] 전체 개인별 리포트 생성 시작")
-        generate_individual_reports()
-    logging.info("Phase4: 개인별 리포트 생성 완료!")
+    generate_individual_reports(period_id=period_id, teams=teams)
+    
+    # 2. 팀별 리포트 생성
+    logging.info("[Phase4] 팀별 리포트 생성 시작")
+    from agents.report.quarterly_team_reports import main as generate_team_reports
+    generate_team_reports(period_id=period_id, teams=teams)
+    
+    logging.info("Phase4: 리포트 생성 완료!")
 
 def run_auto_workflow(period_id: int, specific_teams=None):
     """
@@ -269,8 +273,8 @@ def run_auto_workflow(period_id: int, specific_teams=None):
     # Phase3: 전사 모듈 자동 실행
     run_phase3_all_modules(period_id, teams)
 
-    # Phase4: 개인별 리포트 생성
-    run_phase4_individual_reports(period_id, teams)
+    # Phase4: 리포트 생성 (개인별 + 팀별)
+    run_phase4_reports(period_id, teams)
     logging.info("[AUTO] 전체 평가 자동 실행 완료!")
 
 def main():
@@ -289,7 +293,7 @@ def main():
         else:
             team_list = None
             logging.info("[Phase4-Only] 전체 팀 Phase4 실행")
-        run_phase4_individual_reports(args.period_id, team_list)
+        run_phase4_reports(args.period_id, team_list)
         sys.exit(0)
 
     # --auto 옵션: 전체 or 특정 팀만 자동 실행
@@ -315,8 +319,8 @@ def main():
         logging.warning("일부 팀이 Phase2를 완료하지 못했습니다. 중단합니다.")
         return
     run_phase3_all_modules(args.period_id, teams)
-    # Phase4: 개인별 리포트 생성
-    run_phase4_individual_reports(args.period_id, teams)
+    # Phase4: 리포트 생성 (개인별 + 팀별)
+    run_phase4_reports(args.period_id, teams)
     logging.info("분기별 평가 워크플로우 전체 완료!")
 
 if __name__ == "__main__":

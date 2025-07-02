@@ -24,32 +24,102 @@ def get_db_engine() -> Engine:
     print("✅ 데이터베이스 엔진 생성 완료")
     return engine
 
-def clear_existing_team_reports(engine: Engine):
+def clear_existing_team_reports(engine: Engine, teams: Optional[list] = None, period_id: Optional[int] = None):
     """
     기존 team_evaluations.report 데이터를 NULL로 업데이트하여 삭제합니다.
+    teams와 period_id가 주어지면 해당 팀, 해당 분기의 데이터만 삭제합니다.
     """
     try:
-        query = text("UPDATE team_evaluations SET report = NULL WHERE report IS NOT NULL")
+        if teams and period_id:
+            placeholders = ','.join([':team_id_' + str(i) for i in range(len(teams))])
+            query = text(f"""
+                UPDATE team_evaluations 
+                SET report = NULL 
+                WHERE report IS NOT NULL 
+                AND team_id IN ({placeholders})
+                AND period_id = :period_id
+            """)
+            params = {f'team_id_{i}': team_id for i, team_id in enumerate(teams)}
+            params['period_id'] = period_id
+            print(f"🗑️ 팀 {teams}, 분기 {period_id}의 기존 team_evaluations.report 데이터를 삭제합니다...")
+        elif teams:
+            placeholders = ','.join([':team_id_' + str(i) for i in range(len(teams))])
+            query = text(f"""
+                UPDATE team_evaluations 
+                SET report = NULL 
+                WHERE report IS NOT NULL 
+                AND team_id IN ({placeholders})
+            """)
+            params = {f'team_id_{i}': team_id for i, team_id in enumerate(teams)}
+            print(f"🗑️ 팀 {teams}의 기존 team_evaluations.report 데이터를 삭제합니다...")
+        elif period_id:
+            query = text("""
+                UPDATE team_evaluations 
+                SET report = NULL 
+                WHERE report IS NOT NULL 
+                AND period_id = :period_id
+            """)
+            params = {'period_id': period_id}
+            print(f"🗑️ 분기 {period_id}의 기존 team_evaluations.report 데이터를 삭제합니다...")
+        else:
+            query = text("UPDATE team_evaluations SET report = NULL WHERE report IS NOT NULL")
+            params = {}
+            print(f"🗑️ 모든 기존 team_evaluations.report 데이터를 삭제합니다...")
         with engine.connect() as connection:
             with connection.begin() as transaction:
-                result = connection.execute(query)
+                result = connection.execute(query, params)
                 affected_rows = result.rowcount
                 transaction.commit()
-                print(f"✅ 기존 team evaluation report 데이터 {affected_rows}개 삭제 완료")
+                print(f"✅ 기존 team_evaluations.report 데이터 {affected_rows}개 삭제 완료")
     except Exception as e:
         print(f"❌ 기존 데이터 삭제 중 오류 발생: {e}")
         raise
 
-def fetch_all_team_evaluation_ids(engine: Engine) -> List[int]:
+def fetch_team_evaluation_ids(engine: Engine, period_id: Optional[int] = None, teams: Optional[list] = None) -> List[int]:
     """
-    team_evaluations 테이블에서 모든 팀 평가 ID를 조회합니다.
+    조건에 맞는 team_evaluation_id들을 조회합니다.
     """
-    query = text("SELECT team_evaluation_id FROM team_evaluations ORDER BY team_evaluation_id;")
-    with engine.connect() as connection:
-        results = connection.execute(query).fetchall()
-    ids = [row[0] for row in results]
-    print(f"✅ 총 {len(ids)}개의 팀 평가 리포트를 생성합니다. 대상 ID: {ids}")
-    return ids
+    try:
+        if teams and period_id:
+            placeholders = ','.join([':team_id_' + str(i) for i in range(len(teams))])
+            query = text(f"""
+                SELECT team_evaluation_id FROM team_evaluations 
+                WHERE team_id IN ({placeholders}) AND period_id = :period_id
+                ORDER BY team_evaluation_id
+            """)
+            params = {f'team_id_{i}': team_id for i, team_id in enumerate(teams)}
+            params['period_id'] = period_id
+            print(f"✅ 팀 {teams}, 분기 {period_id}의 team_evaluation_id 조회")
+        elif teams:
+            placeholders = ','.join([':team_id_' + str(i) for i in range(len(teams))])
+            query = text(f"""
+                SELECT team_evaluation_id FROM team_evaluations 
+                WHERE team_id IN ({placeholders})
+                ORDER BY team_evaluation_id
+            """)
+            params = {f'team_id_{i}': team_id for i, team_id in enumerate(teams)}
+            print(f"✅ 팀 {teams}의 모든 team_evaluation_id 조회")
+        elif period_id:
+            query = text("""
+                SELECT team_evaluation_id FROM team_evaluations 
+                WHERE period_id = :period_id
+                ORDER BY team_evaluation_id
+            """)
+            params = {'period_id': period_id}
+            print(f"✅ 분기 {period_id}의 모든 team_evaluation_id 조회")
+        else:
+            query = text("SELECT team_evaluation_id FROM team_evaluations ORDER BY team_evaluation_id")
+            params = {}
+            print(f"✅ 모든 team_evaluation_id 조회")
+        
+        with engine.connect() as connection:
+            results = connection.execute(query, params).fetchall()
+        ids = [row[0] for row in results]
+        print(f"✅ 총 {len(ids)}개의 팀 평가 리포트를 생성합니다. 대상 ID: {ids}")
+        return ids
+    except Exception as e:
+        print(f"❌ team_evaluation_id 조회 중 오류 발생: {e}")
+        return []
 
 def fetch_team_evaluation_basic_data(engine: Engine, team_evaluation_id: int) -> Optional[Row]:
     """
@@ -353,22 +423,23 @@ def validate_korean_team_report(report: dict) -> bool:
     print(f"   - ✅ 팀 리포트 검증 성공!")
     return True
 
-def main(team_evaluation_id: Optional[int] = None):
+def main(period_id: Optional[int] = None, teams: Optional[list] = None):
     """
     메인 실행 함수: 팀 평가 리포트를 한국어 JSON으로 생성하고 DB에 저장합니다.
     
     Args:
-        team_evaluation_id: 특정 팀 평가 ID. None이면 모든 팀 평가를 처리합니다.
+        period_id: 특정 분기 ID. None이면 모든 분기를 처리합니다.
+        teams: 특정 팀 ID 리스트. None이면 모든 팀을 처리합니다.
     """
     try:
         engine = get_db_engine()
 
-        if team_evaluation_id is None:
+        if period_id is None and teams is None:
             # 모든 팀 평가 처리
-            print(f"\n🗑️ 모든 기존 team evaluation report 데이터를 삭제합니다...")
+            print(f"\n🗑️ 모든 기존 team_evaluations.report 데이터를 삭제합니다...")
             clear_existing_team_reports(engine)
 
-            all_team_evaluation_ids = fetch_all_team_evaluation_ids(engine)
+            all_team_evaluation_ids = fetch_team_evaluation_ids(engine)
             if not all_team_evaluation_ids:
                 print("처리할 팀 평가가 데이터베이스에 없습니다.")
                 return
@@ -410,33 +481,56 @@ def main(team_evaluation_id: Optional[int] = None):
             print(f"📊 총 처리: {len(all_team_evaluation_ids)}개")
             
         else:
-            # 특정 팀 평가만 처리
-            print(f"\n🎯 특정 팀 평가 ID {team_evaluation_id} 처리 시작")
+            # 특정 조건으로 처리
+            if teams and period_id:
+                print(f"\n🎯 특정 팀 {teams}, 분기 {period_id} 처리 시작")
+            elif teams:
+                print(f"\n🎯 특정 팀 {teams} 처리 시작 (모든 분기)")
+            elif period_id:
+                print(f"\n🎯 특정 분기 {period_id} 처리 시작 (모든 팀)")
             print(f"{'='*50}")
             
-            try:
-                팀평가기본데이터 = fetch_team_evaluation_basic_data(engine, team_evaluation_id)
-                if not 팀평가기본데이터:
-                    print(f"❌ Team Evaluation ID {team_evaluation_id}를 조회할 수 없습니다.")
-                    return
-
-                팀kpi데이터 = fetch_team_kpis(engine, 팀평가기본데이터.team_id)
-                팀원피드백데이터 = fetch_team_members_feedback(engine, 팀평가기본데이터.team_id, 팀평가기본데이터.period_id)
-                
-                한국어리포트 = generate_korean_team_evaluation_report(팀평가기본데이터, 팀kpi데이터, 팀원피드백데이터)
-
-                if not validate_korean_team_report(한국어리포트):
-                    print(f"❌ 팀 리포트 데이터 검증 실패")
-                    return
-
-                save_team_json_report_to_db(engine, team_evaluation_id, 한국어리포트)
-                print(f"\n✅ Team Evaluation ID {team_evaluation_id} 처리 완료!")
-                
-            except Exception as e:
-                print(f"❌ Team Evaluation ID {team_evaluation_id} 처리 중 오류 발생: {e}")
-                import traceback
-                traceback.print_exc()
+            # 조건에 맞는 team_evaluation_id 조회
+            target_team_evaluation_ids = fetch_team_evaluation_ids(engine, period_id, teams)
+            if not target_team_evaluation_ids:
+                print("조건에 맞는 팀 평가가 데이터베이스에 없습니다.")
                 return
+
+            success_count, error_count = 0, 0
+            for current_team_evaluation_id in target_team_evaluation_ids:
+                print(f"\n{'='*50}\n🚀 팀 평가 리포트 생성 시작 (ID: {current_team_evaluation_id})\n{'='*50}")
+                try:
+                    팀평가기본데이터 = fetch_team_evaluation_basic_data(engine, current_team_evaluation_id)
+                    if not 팀평가기본데이터:
+                        print(f"⚠️ Team Evaluation ID {current_team_evaluation_id}를 조회하는 데 실패했습니다. 다음으로 넘어갑니다.")
+                        error_count += 1
+                        continue
+
+                    팀kpi데이터 = fetch_team_kpis(engine, 팀평가기본데이터.team_id)
+                    팀원피드백데이터 = fetch_team_members_feedback(engine, 팀평가기본데이터.team_id, 팀평가기본데이터.period_id)
+                    
+                    한국어리포트 = generate_korean_team_evaluation_report(팀평가기본데이터, 팀kpi데이터, 팀원피드백데이터)
+
+                    if not validate_korean_team_report(한국어리포트):
+                        print(f"   - ❌ 팀 리포트 데이터 검증 실패")
+                        error_count += 1
+                        continue
+
+                    save_team_json_report_to_db(engine, current_team_evaluation_id, 한국어리포트)
+                    success_count += 1
+
+                except Exception as e:
+                    print(f"⚠️ Team Evaluation ID {current_team_evaluation_id} 처리 중 심각한 오류 발생: {e}")
+                    import traceback
+                    traceback.print_exc()
+                    error_count += 1
+                    continue
+                time.sleep(0.5)
+
+            print(f"\n🎉 팀 평가 리포트 생성 완료!")
+            print(f"✅ 성공: {success_count}개")
+            print(f"❌ 실패: {error_count}개")
+            print(f"📊 총 처리: {len(target_team_evaluation_ids)}개")
                 
     except ValueError as e:
         print(f"설정 오류: {e}")
