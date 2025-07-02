@@ -1,4 +1,4 @@
-FROM python:3.11-slimAdd commentMore actions
+FROM python:3.11-slim
 
 # 필수 시스템 패키지 설치 (onnx, torch 등 일부는 필요함)
 RUN apt-get update && apt-get install -y \
