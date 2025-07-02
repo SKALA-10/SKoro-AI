@@ -336,7 +336,7 @@ def generate_korean_feedback_report(
     elif cl_레벨 and not cl_레벨.startswith("CL"):
         cl_레벨 = f"CL{cl_레벨}"
 
-    # 업무표 데이터 처리
+    # 업무표 데이터 처리 - 누적 달성률 높은 순으로 정렬
     업무표 = [
         {
             "Task명": t.task_name or "",
@@ -346,6 +346,9 @@ def generate_korean_feedback_report(
         }
         for t in 업무데이터
     ]
+    
+    # 누적 달성률이 높은 순으로 정렬 (None 값은 0으로 처리)
+    업무표.sort(key=lambda x: float(x["누적 달성률 (%)"]) if x["누적 달성률 (%)"] is not None else 0, reverse=True)
 
     한국어리포트 = {
         "기본_정보": {
