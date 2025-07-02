@@ -31,6 +31,8 @@ def parse_arguments():
   python agents/report/run_quarterly_individual_reports.py                    # 모든 직원 처리
   python agents/report/run_quarterly_individual_reports.py --emp_no SK0002   # 특정 직원만 처리 (모든 분기)
   python agents/report/run_quarterly_individual_reports.py --emp_no SK0002 --period-id 2  # 특정 직원의 특정 분기만 처리
+  python agents/report/run_quarterly_individual_reports.py --teams 1 2 3     # 특정 팀들의 직원만 처리
+  python agents/report/run_quarterly_individual_reports.py --teams 1 2 --period-id 2  # 특정 팀들의 특정 분기만 처리
         """
     )
     
@@ -44,6 +46,13 @@ def parse_arguments():
         "--period-id",
         type=int,
         help="처리할 특정 분기 ID (예: 1, 2, 3, 4). 생략하면 모든 분기를 처리합니다."
+    )
+    
+    parser.add_argument(
+        "--teams",
+        type=int,
+        nargs='+',
+        help="처리할 특정 팀 ID들 (예: --teams 1 2 3). 생략하면 모든 팀을 처리합니다."
     )
     
     return parser.parse_args()
@@ -62,6 +71,12 @@ def main_wrapper():
         elif args.emp_no:
             print(f"🎯 특정 직원 처리 모드: {args.emp_no}님 (모든 분기)")
             main(emp_no=args.emp_no)
+        elif args.teams and args.period_id:
+            print(f"🎯 특정 팀들의 특정 분기 처리 모드: 팀 {args.teams} (분기 ID: {args.period_id})")
+            main(teams=args.teams, period_id=args.period_id)
+        elif args.teams:
+            print(f"🎯 특정 팀들 처리 모드: 팀 {args.teams} (모든 분기)")
+            main(teams=args.teams)
         else:
             print("📊 전체 직원 처리 모드")
             main()
