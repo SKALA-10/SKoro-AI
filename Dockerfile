@@ -1,8 +1,7 @@
-FROM python:3.11-slim
+FROM python:3.11-slimAdd commentMore actions
 
 # 필수 시스템 패키지 설치 (onnx, torch 등 일부는 필요함)
 RUN apt-get update && apt-get install -y \
-    curl \
     build-essential \
     libglib2.0-0 \
     libsm6 \
@@ -10,21 +9,12 @@ RUN apt-get update && apt-get install -y \
     libxext6 \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
 
-# Poetry 설치 (버전 고정)
-ENV POETRY_VERSION=1.8.5
-RUN curl -sSL https://install.python-poetry.org | POETRY_VERSION=$POETRY_VERSION python3 - && \
-    ln -s /root/.local/bin/poetry /usr/local/bin/poetry
-
-# Docker 안에서 가상환경 생성 방지
-ENV POETRY_VIRTUALENVS_CREATE=false
-
 WORKDIR /app
 
-# 의존성 파일 복사
-COPY pyproject.toml poetry.lock* ./
+# requirements.txt만 먼저 복사해서 설치 (캐시 활용)
+COPY requirements.txt .
 
-# 의존성 설치
-RUN poetry install --no-interaction --no-ansi
+RUN pip install --no-cache-dir -r requirements.txt
 
 # 앱 전체 복사
 COPY . .
