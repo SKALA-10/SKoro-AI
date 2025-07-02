@@ -23,7 +23,7 @@ def get_db_engine() -> Engine:
 # --- 2. 데이터 조회 함수 ---
 def fetch_final_evaluation_emp_nos(engine: Engine, period_id: Optional[int] = None, teams: Optional[list] = None) -> List[str]:
     """
-    final_evaluation_reports 테이블에서 직원 번호를 조회합니다.
+    final_evaluation_reports 테이블에서 직원 번호를 조회합니다. (팀장 제외)
     period_id와 teams가 주어지면 해당 조건에 맞는 직원들만 조회합니다.
     """
     try:
@@ -34,7 +34,9 @@ def fetch_final_evaluation_emp_nos(engine: Engine, period_id: Optional[int] = No
                 FROM final_evaluation_reports fer
                 JOIN team_evaluations te ON fer.team_evaluation_id = te.team_evaluation_id
                 JOIN employees e ON fer.emp_no = e.emp_no
-                WHERE te.period_id = :period_id AND e.team_id IN ({placeholders})
+                WHERE te.period_id = :period_id 
+                AND e.team_id IN ({placeholders})
+                AND e.role != 'MANAGER'  # 팀장 제외
                 ORDER BY fer.emp_no;
             """)
             params = {f'team_id_{i}': team_id for i, team_id in enumerate(teams)}
@@ -48,6 +50,7 @@ def fetch_final_evaluation_emp_nos(engine: Engine, period_id: Optional[int] = No
                 JOIN team_evaluations te ON fer.team_evaluation_id = te.team_evaluation_id
                 JOIN employees e ON fer.emp_no = e.emp_no
                 WHERE e.team_id IN ({placeholders})
+                AND e.role != 'MANAGER'  # 팀장 제외
                 ORDER BY fer.emp_no;
             """)
             params = {f'team_id_{i}': team_id for i, team_id in enumerate(teams)}
@@ -57,13 +60,21 @@ def fetch_final_evaluation_emp_nos(engine: Engine, period_id: Optional[int] = No
                 SELECT DISTINCT fer.emp_no 
                 FROM final_evaluation_reports fer
                 JOIN team_evaluations te ON fer.team_evaluation_id = te.team_evaluation_id
+                JOIN employees e ON fer.emp_no = e.emp_no
                 WHERE te.period_id = :period_id
+                AND e.role != 'MANAGER'  # 팀장 제외
                 ORDER BY fer.emp_no;
             """)
             params = {'period_id': period_id}
             print(f"✅ 분기 {period_id}의 연말 평가 대상자 조회")
         else:
-            query = text("SELECT DISTINCT emp_no FROM final_evaluation_reports ORDER BY emp_no;")
+            query = text("""
+                SELECT DISTINCT fer.emp_no 
+                FROM final_evaluation_reports fer
+                JOIN employees e ON fer.emp_no = e.emp_no
+                WHERE e.role != 'MANAGER'  # 팀장 제외
+                ORDER BY fer.emp_no;
+            """)
             params = {}
             print(f"✅ 모든 연말 평가 대상자 조회")
         

@@ -12,6 +12,9 @@
 # - 모듈8: 팀 성과 비교
 # - 모듈10: 개인 성장 코칭
 # - 모듈11: 팀 운영 리스크 분석
+# Phase 4: 리포트 생성
+# - 개인별 리포트 생성
+# - 팀별 리포트 생성
 # =====================================
 # 사용 예시 (터미널 실행 명령어)
 # =====================================
@@ -21,7 +24,22 @@
 #   python agents/workflow/quarterly_evaluation_workflow.py --period-id 2 --auto --teams 1
 # 여러 팀 지정 (예: 팀 1, 3, 5):
 #   python agents/workflow/quarterly_evaluation_workflow.py --period-id 2 --auto --teams 1,3,5
+# 특정 단계만 실행:
+#   python agents/workflow/quarterly_evaluation_workflow.py --period-id 2 --phase 1 --teams 1
+#   python agents/workflow/quarterly_evaluation_workflow.py --period-id 2 --phase 2 --teams 1
+#   python agents/workflow/quarterly_evaluation_workflow.py --period-id 2 --phase 3 --teams 1
+#   python agents/workflow/quarterly_evaluation_workflow.py --period-id 2 --phase 4 --teams 1
+# 특정 모듈만 실행:
+#   python agents/workflow/quarterly_evaluation_workflow.py --period-id 2 --module 2 --teams 1
+#   python agents/workflow/quarterly_evaluation_workflow.py --period-id 2 --module 3 --teams 1
+#   python agents/workflow/quarterly_evaluation_workflow.py --period-id 2 --module 4 --teams 1
+#   python agents/workflow/quarterly_evaluation_workflow.py --period-id 2 --module 6 --teams 1
+#   python agents/workflow/quarterly_evaluation_workflow.py --period-id 2 --module 8 --teams 1
+#   python agents/workflow/quarterly_evaluation_workflow.py --period-id 2 --module 10 --teams 1
+#   python agents/workflow/quarterly_evaluation_workflow.py --period-id 2 --module 11 --teams 1
 # =====================================
+
+
 
 import argparse
 import logging
@@ -278,36 +296,252 @@ def run_auto_workflow(period_id: int, specific_teams=None):
     logging.info("[AUTO] 전체 평가 자동 실행 완료!")
 
 def main():
-    parser = argparse.ArgumentParser()
-    parser.add_argument('--period-id', type=int, required=True)
-    parser.add_argument('--teams', help='1,2,3 or all', required=False, default=None)
+    parser = argparse.ArgumentParser(
+        description="분기별 평가 워크플로우",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+사용 예시:
+  # 전체 자동 실행
+  python agents/workflow/quarterly_evaluation_workflow.py --period-id 2 --auto
+  
+  # 특정 팀만 자동 실행
+  python agents/workflow/quarterly_evaluation_workflow.py --period-id 2 --auto --teams 1
+  
+  # 특정 단계만 실행
+  python agents/workflow/quarterly_evaluation_workflow.py --period-id 2 --phase 1 --teams 1
+  python agents/workflow/quarterly_evaluation_workflow.py --period-id 2 --phase 2 --teams 1
+  python agents/workflow/quarterly_evaluation_workflow.py --period-id 2 --phase 3 --teams 1
+  python agents/workflow/quarterly_evaluation_workflow.py --period-id 2 --phase 4 --teams 1
+  
+  # 특정 모듈만 실행
+  python agents/workflow/quarterly_evaluation_workflow.py --period-id 2 --module 2 --teams 1
+  python agents/workflow/quarterly_evaluation_workflow.py --period-id 2 --module 3 --teams 1
+  python agents/workflow/quarterly_evaluation_workflow.py --period-id 2 --module 4 --teams 1
+  python agents/workflow/quarterly_evaluation_workflow.py --period-id 2 --module 6 --teams 1
+  python agents/workflow/quarterly_evaluation_workflow.py --period-id 2 --module 8 --teams 1
+  python agents/workflow/quarterly_evaluation_workflow.py --period-id 2 --module 10 --teams 1
+  python agents/workflow/quarterly_evaluation_workflow.py --period-id 2 --module 11 --teams 1
+        """
+    )
+    parser.add_argument('--period-id', type=int, required=True, help='분기 ID (예: 2)')
+    parser.add_argument('--teams', help='팀 ID (예: 1,2,3 또는 all)', required=False, default=None)
     parser.add_argument('--auto', action='store_true', help='모든 단계 자동 실행')
-    parser.add_argument('--phase4-only', action='store_true', help='Phase4(개인별 리포트 생성)만 실행')
+    parser.add_argument('--phase', type=int, choices=[1, 2, 3, 4], help='특정 Phase만 실행')
+    parser.add_argument('--module', type=int, choices=[2, 3, 4, 6, 8, 10, 11], help='특정 모듈만 실행')
+    parser.add_argument('--phase4-only', action='store_true', help='Phase4(리포트 생성)만 실행 (deprecated, --phase 4 사용)')
     args = parser.parse_args()
 
-    # --phase4-only 옵션: Phase4만 실행
-    if args.phase4_only:
-        if args.teams and args.teams != 'all':
-            team_list = parse_teams(args.teams)
-            logging.info(f"[Phase4-Only] 지정된 팀만 Phase4 실행: {team_list}")
-        else:
-            team_list = None
-            logging.info("[Phase4-Only] 전체 팀 Phase4 실행")
-        run_phase4_reports(args.period_id, team_list)
-        sys.exit(0)
+    # 팀 목록 파싱
+    if args.teams and args.teams != 'all':
+        team_list = parse_teams(args.teams)
+    else:
+        team_list = None
 
-    # --auto 옵션: 전체 or 특정 팀만 자동 실행
+    # --phase4-only 옵션 (deprecated)
+    if args.phase4_only:
+        logging.warning("--phase4-only는 deprecated입니다. --phase 4를 사용하세요.")
+        args.phase = 4
+
+    # --auto 옵션: 전체 자동 실행
     if args.auto:
-        if args.teams and args.teams != 'all':
-            team_list = parse_teams(args.teams)
+        if team_list:
             logging.info(f"[AUTO] 지정된 팀만 자동 실행: {team_list}")
         else:
-            team_list = None
             logging.info("[AUTO] 전체 팀 자동 실행")
         run_auto_workflow(args.period_id, team_list)
         sys.exit(0)
 
-    teams = get_target_teams(args.period_id, parse_teams(args.teams))
+    # --phase 옵션: 특정 Phase만 실행
+    if args.phase:
+        teams = get_target_teams(args.period_id, team_list)
+        logging.info(f"[Phase{args.phase}] {len(teams)}개 팀 실행")
+        
+        if args.phase == 1:
+            run_phase1_all_teams(teams, args.period_id)
+        elif args.phase == 2:
+            run_phase2_all_teams(teams, args.period_id)
+        elif args.phase == 3:
+            run_phase3_all_modules(args.period_id, teams)
+        elif args.phase == 4:
+            run_phase4_reports(args.period_id, teams)
+        
+        logging.info(f"[Phase{args.phase}] 완료!")
+        sys.exit(0)
+
+    # --module 옵션: 특정 모듈만 실행
+    if args.module:
+        teams = get_target_teams(args.period_id, team_list)
+        logging.info(f"[Module{args.module}] {len(teams)}개 팀 실행")
+        
+        if args.module == 2:
+            # 모듈2: 목표달성도 분석
+            for team_id in teams:
+                logging.info(f"[Module2] 팀 {team_id} 실행")
+                task_ids, kpi_ids = fetch_team_tasks_and_kpis(team_id, args.period_id)
+                state = {
+                    "report_type": "quarterly",
+                    "team_id": team_id,
+                    "period_id": args.period_id,
+                    "target_task_ids": task_ids,
+                    "target_team_kpi_ids": kpi_ids,
+                    "feedback_report_ids": [],
+                    "final_evaluation_report_ids": [],
+                    "updated_task_ids": [],
+                    "updated_team_kpi_ids": [],
+                    "team_evaluation_id": None,
+                    "team_context_guide": {},
+                    "messages": []
+                }
+                graph = create_module2_graph()
+                graph.invoke(state)
+        
+        elif args.module == 3:
+            # 모듈3: Peer Talk 분석
+            for team_id in teams:
+                logging.info(f"[Module3] 팀 {team_id} 실행")
+                members = fetch_team_members(team_id)
+                for member in members:
+                    if member.get('role') == 'MANAGER':
+                        continue
+                    state = {
+                        "team_id": team_id,
+                        "period_id": args.period_id,
+                        "target_emp_no": member['emp_no'],
+                        "peer_evaluation_ids": [],
+                        "evaluator_emp_nos": [],
+                        "evaluation_weights": [],
+                        "keyword_collections": [],
+                        "task_summaries": [],
+                        "peer_evaluation_summary_sentences": [],
+                        "strengths": [],
+                        "concerns": [],
+                        "collaboration_observations": [],
+                        "weighted_analysis_result": {},
+                        "feedback_report_id": None,
+                        "final_evaluation_report_id": None,
+                        "messages": []
+                    }
+                    graph = create_module3_graph()
+                    graph.invoke(state)
+        
+        elif args.module == 4:
+            # 모듈4: 협업 분석
+            for team_id in teams:
+                logging.info(f"[Module4] 팀 {team_id} 실행")
+                _, kpi_ids = fetch_team_tasks_and_kpis(team_id, args.period_id)
+                state = {
+                    "report_type": "quarterly",
+                    "team_id": team_id,
+                    "period_id": args.period_id,
+                    "target_team_kpi_ids": kpi_ids,
+                    "collaboration_relationships": None,
+                    "individual_collaboration_analysis": None,
+                    "team_collaboration_matrix": None,
+                    "team_evaluation_id": None,
+                    "messages": None
+                }
+                graph = create_module4_graph()
+                graph.invoke(state)
+        
+        elif args.module == 6:
+            # 모듈6: 4P BARS 평가
+            for team_id in teams:
+                logging.info(f"[Module6] 팀 {team_id} 실행")
+                members = fetch_team_members(team_id)
+                for member in members:
+                    if member.get('role') == 'MANAGER':
+                        continue
+                    state = {
+                        "report_type": "quarterly",
+                        "team_id": team_id,
+                        "period_id": args.period_id,
+                        "emp_no": member['emp_no'],
+                        "feedback_report_id": None,
+                        "final_evaluation_report_id": None,
+                        "raw_evaluation_criteria": "",
+                        "evaluation_criteria": {},
+                        "evaluation_results": {},
+                        "integrated_data": {},
+                        "messages": []
+                    }
+                    graph = create_module6_graph_efficient()
+                    graph.invoke(state)
+        
+        elif args.module == 8:
+            # 모듈8: 팀 성과 비교
+            for team_id in teams:
+                logging.info(f"[Module8] 팀 {team_id} 실행")
+                module8_graph = create_module8_graph()
+                state8 = {
+                    "team_id": team_id,
+                    "period_id": args.period_id,
+                    "report_type": "quarterly",
+                    "messages": []
+                }
+                module8_graph.invoke(state8)
+        
+        elif args.module == 10:
+            # 모듈10: 개인 성장 코칭
+            for team_id in teams:
+                logging.info(f"[Module10] 팀 {team_id} 실행")
+                members = fetch_team_members(team_id)
+                for member in members:
+                    if member.get('role') == 'MANAGER':
+                        continue
+                    emp_no = member["emp_no"]
+                    logging.info(f"[Module10] {emp_no} 실행")
+                    module10_graph = create_module10_graph()
+                    state10 = {
+                        "emp_no": emp_no,
+                        "period_id": args.period_id,
+                        "report_type": "quarterly",
+                        "messages": [],
+                        "basic_info": {},
+                        "performance_data": {},
+                        "peer_talk_data": {},
+                        "fourp_data": {},
+                        "collaboration_data": {},
+                        "module7_score_data": {},
+                        "module9_final_data": {},
+                        "growth_analysis": {},
+                        "focus_coaching_needed": False,
+                        "focus_coaching_analysis": {},
+                        "individual_growth_result": {},
+                        "manager_coaching_result": {},
+                        "overall_comment": "",
+                        "storage_result": {},
+                        "processing_status": "",
+                        "error_messages": []
+                    }
+                    module10_graph.invoke(state10)
+        
+        elif args.module == 11:
+            # 모듈11: 팀 리스크 분석
+            async def run_module11():
+                db_wrapper = SQLAlchemyDBWrapper(engine)
+                data_access = Module11DataAccess(db_wrapper)
+                agent11 = Module11TeamRiskManagementAgent(data_access)
+                tasks = []
+                for team_id in teams:
+                    logging.info(f"[Module11] 팀 {team_id} 실행")
+                    try:
+                        from agents.evaluation.modules.module_02_goal_achievement.db_utils import fetch_team_evaluation_id
+                        team_evaluation_id = fetch_team_evaluation_id(team_id, args.period_id)
+                        if not team_evaluation_id:
+                            logging.error(f"[Module11] 팀 {team_id} team_evaluation_id 없음")
+                            continue
+                        tasks.append(agent11.execute(team_id, args.period_id, team_evaluation_id))
+                    except Exception as e:
+                        logging.error(f"[Module11] 팀 {team_id} 실패: {e}")
+                await asyncio.gather(*tasks)
+            
+            asyncio.run(run_module11())
+        
+        logging.info(f"[Module{args.module}] 완료!")
+        sys.exit(0)
+
+    # 기본 실행: 모든 단계 순차 실행
+    teams = get_target_teams(args.period_id, team_list)
     logging.info(f"🚀 평가 시작: {len(teams)}개 팀")
 
     run_phase1_all_teams(teams, args.period_id)

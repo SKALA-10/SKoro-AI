@@ -251,7 +251,7 @@ def generate_korean_team_evaluation_report(
                 "핵심 협업자": member_data.get("key_collaborators", []),
                 "팀 내 역할": member_data.get("team_role", ""),
                 "Peer Talk 평가": member_data.get("peer_talk_summary", ""),
-                "협업 편중도": f"{safe_convert_to_serializable(member_data.get('collaboration_bias', 0))}%",
+                "협업 편중도": f"{safe_convert_to_serializable(member_data.get('collaboration_bias', 0))}",
                 "종합 평가": member_data.get("overall_evaluation", "")
             })
 
