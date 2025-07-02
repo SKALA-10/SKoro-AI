@@ -11,7 +11,7 @@ from sqlalchemy.exc import ProgrammingError
 
 from config.settings import DatabaseConfig
 
-print("✅ 최종 팀 평가 리포트 생성기 (Period 4 전용) - 기본 라이브러리 임포트 완료")
+print("✅ 연말 팀 평가 리포트 생성기 - 기본 라이브러리 임포트 완료")
 
 # --- 1. 데이터베이스 연동 함수 ---
 
@@ -24,43 +24,108 @@ def get_db_engine() -> Engine:
     print("✅ 데이터베이스 엔진 생성 완료")
     return engine
 
-def clear_existing_period4_team_reports(engine: Engine):
-    """기존 Period 4의 team_evaluations.report 데이터만 삭제"""
+def clear_existing_team_reports(engine: Engine, teams: Optional[list] = None, period_id: Optional[int] = None):
+    """
+    기존 team_evaluations.report 데이터를 NULL로 업데이트하여 삭제합니다.
+    teams와 period_id가 주어지면 해당 팀, 해당 분기의 데이터만 삭제합니다.
+    """
     try:
-        query = text("""
-            UPDATE team_evaluations 
-            SET report = NULL 
-            WHERE report IS NOT NULL 
-            AND period_id = 4
-        """)
+        if teams and period_id:
+            placeholders = ','.join([':team_id_' + str(i) for i in range(len(teams))])
+            query = text(f"""
+                UPDATE team_evaluations 
+                SET report = NULL 
+                WHERE report IS NOT NULL 
+                AND team_id IN ({placeholders})
+                AND period_id = :period_id
+            """)
+            params = {f'team_id_{i}': team_id for i, team_id in enumerate(teams)}
+            params['period_id'] = period_id
+            print(f"🗑️ 팀 {teams}, 분기 {period_id}의 기존 team_evaluations.report 데이터를 삭제합니다...")
+        elif teams:
+            placeholders = ','.join([':team_id_' + str(i) for i in range(len(teams))])
+            query = text(f"""
+                UPDATE team_evaluations 
+                SET report = NULL 
+                WHERE report IS NOT NULL 
+                AND team_id IN ({placeholders})
+            """)
+            params = {f'team_id_{i}': team_id for i, team_id in enumerate(teams)}
+            print(f"🗑️ 팀 {teams}의 기존 team_evaluations.report 데이터를 삭제합니다...")
+        elif period_id:
+            query = text("""
+                UPDATE team_evaluations 
+                SET report = NULL 
+                WHERE report IS NOT NULL 
+                AND period_id = :period_id
+            """)
+            params = {'period_id': period_id}
+            print(f"🗑️ 분기 {period_id}의 기존 team_evaluations.report 데이터를 삭제합니다...")
+        else:
+            query = text("UPDATE team_evaluations SET report = NULL WHERE report IS NOT NULL")
+            params = {}
+            print(f"🗑️ 모든 기존 team_evaluations.report 데이터를 삭제합니다...")
+        
         with engine.connect() as connection:
             with connection.begin() as transaction:
-                result = connection.execute(query)
+                result = connection.execute(query, params)
                 affected_rows = result.rowcount
                 transaction.commit()
-                print(f"✅ 기존 Period 4 team evaluation final report 데이터 {affected_rows}개 삭제 완료")
+                print(f"✅ 기존 team_evaluations.report 데이터 {affected_rows}개 삭제 완료")
     except Exception as e:
         print(f"❌ 기존 데이터 삭제 중 오류 발생: {e}")
         raise
 
-def fetch_period4_team_evaluation_ids(engine: Engine) -> List[int]:
-    """Period 4의 팀 평가 ID만 조회"""
-    query = text("""
-        SELECT team_evaluation_id 
-        FROM team_evaluations 
-        WHERE period_id = 4
-        ORDER BY team_evaluation_id;
-    """)
-    with engine.connect() as connection:
-        results = connection.execute(query).fetchall()
-    ids = [row[0] for row in results]
-    print(f"✅ Period 4 전용: 총 {len(ids)}개의 최종 팀 평가 리포트를 생성합니다. 대상 ID: {ids}")
-    return ids
+def fetch_team_evaluation_ids(engine: Engine, period_id: Optional[int] = None, teams: Optional[list] = None) -> List[int]:
+    """
+    조건에 맞는 team_evaluation_id들을 조회합니다.
+    """
+    try:
+        if teams and period_id:
+            placeholders = ','.join([':team_id_' + str(i) for i in range(len(teams))])
+            query = text(f"""
+                SELECT team_evaluation_id FROM team_evaluations 
+                WHERE team_id IN ({placeholders}) AND period_id = :period_id
+                ORDER BY team_evaluation_id
+            """)
+            params = {f'team_id_{i}': team_id for i, team_id in enumerate(teams)}
+            params['period_id'] = period_id
+            print(f"✅ 팀 {teams}, 분기 {period_id}의 team_evaluation_id 조회")
+        elif teams:
+            placeholders = ','.join([':team_id_' + str(i) for i in range(len(teams))])
+            query = text(f"""
+                SELECT team_evaluation_id FROM team_evaluations 
+                WHERE team_id IN ({placeholders})
+                ORDER BY team_evaluation_id
+            """)
+            params = {f'team_id_{i}': team_id for i, team_id in enumerate(teams)}
+            print(f"✅ 팀 {teams}의 모든 team_evaluation_id 조회")
+        elif period_id:
+            query = text("""
+                SELECT team_evaluation_id FROM team_evaluations 
+                WHERE period_id = :period_id
+                ORDER BY team_evaluation_id
+            """)
+            params = {'period_id': period_id}
+            print(f"✅ 분기 {period_id}의 모든 team_evaluation_id 조회")
+        else:
+            query = text("SELECT team_evaluation_id FROM team_evaluations ORDER BY team_evaluation_id")
+            params = {}
+            print(f"✅ 모든 team_evaluation_id 조회")
+        
+        with engine.connect() as connection:
+            results = connection.execute(query, params).fetchall()
+        ids = [row[0] for row in results]
+        print(f"✅ 총 {len(ids)}개의 연말 팀 평가 리포트를 생성합니다. 대상 ID: {ids}")
+        return ids
+    except Exception as e:
+        print(f"❌ team_evaluation_id 조회 중 오류 발생: {e}")
+        return []
 
 # --- 2. 데이터 조회 함수 ---
 
 def fetch_team_evaluation_data(engine: Engine, team_evaluation_id: int) -> dict:
-    """리포트 생성에 필요한 모든 데이터를 DB에서 직접 조회 (Period 4 검증 포함)"""
+    """리포트 생성에 필요한 모든 데이터를 DB에서 직접 조회"""
     
     team_info_query = text("""
         SELECT 
@@ -73,17 +138,13 @@ def fetch_team_evaluation_data(engine: Engine, team_evaluation_id: int) -> dict:
         JOIN teams t ON te.team_id = t.team_id
         JOIN periods p ON te.period_id = p.period_id
         LEFT JOIN employees m ON t.team_id = m.team_id AND m.role = 'MANAGER'
-        WHERE te.team_evaluation_id = :id AND te.period_id = 4
+        WHERE te.team_evaluation_id = :id
     """)
     with engine.connect() as conn:
         team_info = conn.execute(team_info_query, {"id": team_evaluation_id}).first()
     
     if not team_info:
-        raise ValueError(f"Team Evaluation ID {team_evaluation_id}를 찾을 수 없거나 Period 4가 아닙니다.")
-
-    # Period 4 검증
-    if team_info.period_id != 4:
-        raise ValueError(f"Team Evaluation ID {team_evaluation_id}는 Period {team_info.period_id}입니다. Period 4만 처리 가능합니다.")
+        raise ValueError(f"Team Evaluation ID {team_evaluation_id}를 찾을 수 없습니다.")
 
     # KPI 데이터 조회
     kpi_query = text("SELECT kpi_name, ai_kpi_analysis_comment, ai_kpi_progress_rate FROM team_kpis WHERE team_id = :team_id")
@@ -108,7 +169,7 @@ def fetch_team_evaluation_data(engine: Engine, team_evaluation_id: int) -> dict:
     with engine.connect() as conn:
         summaries = conn.execute(summary_query, {"team_eval_id": team_evaluation_id}).fetchall()
 
-    print(f"   - Period 4 팀 ID {team_info.team_id}의 모든 데이터 조회 완료")
+    print(f"   - 팀 ID {team_info.team_id}의 모든 데이터 조회 완료")
     return {"team_info": team_info, "kpis": kpis, "summaries": summaries}
 
 
@@ -310,7 +371,7 @@ def generate_team_evaluation_report(data: dict) -> dict:
         "총평": 총평
     }
     
-    print(f"   - Period 4 최종 팀 평가 리포트 생성 완료")
+    print(f"   - 연말 팀 평가 리포트 생성 완료")
     return final_report
 
 # --- 4. DB 저장 및 메인 실행 함수 ---
@@ -321,11 +382,10 @@ def save_team_json_report_to_db(engine: Engine, team_evaluation_id: int, json_re
         print(f"   - ❌ JSON 직렬화 오류: {e}")
         json_content = json.dumps(safe_convert_to_serializable(json_report), ensure_ascii=False, indent=2, default=str)
     
-    # Period 4 재검증을 위한 쿼리
     query = text("""
         UPDATE team_evaluations 
         SET report = :report 
-        WHERE team_evaluation_id = :id AND period_id = 4
+        WHERE team_evaluation_id = :id
     """)
     with engine.connect() as connection:
         with connection.begin() as transaction:
@@ -333,10 +393,10 @@ def save_team_json_report_to_db(engine: Engine, team_evaluation_id: int, json_re
                 result = connection.execute(query, {"report": json_content, "id": team_evaluation_id})
                 if result.rowcount > 0:
                     transaction.commit()
-                    print(f"   - ✅ Team Eval ID {team_evaluation_id} (Period 4)의 최종 팀 평가 리포트가 DB에 저장되었습니다.")
+                    print(f"   - ✅ Team Eval ID {team_evaluation_id}의 연말 팀 평가 리포트가 DB에 저장되었습니다.")
                 else:
                     transaction.rollback()
-                    print(f"   - ⚠️ Team Eval ID {team_evaluation_id}가 Period 4가 아니거나 존재하지 않습니다.")
+                    print(f"   - ⚠️ Team Evaluation ID {team_evaluation_id}에 해당하는 레코드를 찾을 수 없습니다.")
             except Exception as e:
                 print(f"   - ❌ DB 저장 중 오류 발생: {e}")
                 transaction.rollback()
@@ -347,37 +407,39 @@ def validate_team_report(report: dict) -> bool:
                     "팀 성과 요약", "팀 조직력 및 리스크 요인", 
                     "다음 연도 운영 제안", "총평"]
     
-    print(f"   - 🔍 Period 4 최종 리포트 검증 시작...")
+    print(f"   - 🔍 연말 팀 평가 리포트 검증 시작...")
     for key in required_keys:
         if key not in report:
             print(f"   - ⚠️ 필수 키 누락: {key}")
             return False
-    print(f"   - ✅ Period 4 최종 리포트 검증 성공!")
+    print(f"   - ✅ 연말 팀 평가 리포트 검증 성공!")
     return True
 
-def main(team_evaluation_id: Optional[int] = None):
+def main(team_evaluation_id: Optional[int] = None, period_id: Optional[int] = None, teams: Optional[list] = None):
     """
-    메인 실행 함수: Period 4에만 최종 팀 평가 리포트를 생성하고 report에 저장합니다.
+    메인 실행 함수: 연말 팀 평가 리포트를 생성하고 report에 저장합니다.
     
     Args:
-        team_evaluation_id: 특정 팀 평가 ID. None이면 모든 Period 4 팀 평가를 처리합니다.
+        team_evaluation_id: 특정 팀 평가 ID. None이면 조건에 맞는 모든 팀 평가를 처리합니다.
+        period_id: 특정 분기 ID. None이면 모든 분기를 처리합니다.
+        teams: 특정 팀 ID 리스트. None이면 모든 팀을 처리합니다.
     """
     try:
         engine = get_db_engine()
 
         if team_evaluation_id is None:
-            # 모든 Period 4 팀 평가 처리
-            print(f"\n🗑️ 기존 Period 4 최종 팀 평가 리포트 데이터 삭제 중...")
-            clear_existing_period4_team_reports(engine)
+            # 조건에 맞는 팀 평가 처리
+            print(f"\n🗑️ 기존 team_evaluations.report 데이터를 삭제합니다...")
+            clear_existing_team_reports(engine, teams, period_id)
             
-            period4_ids = fetch_period4_team_evaluation_ids(engine)
-            if not period4_ids:
-                print("처리할 Period 4 팀 평가 데이터가 없습니다.")
+            target_team_evaluation_ids = fetch_team_evaluation_ids(engine, period_id, teams)
+            if not target_team_evaluation_ids:
+                print("처리할 팀 평가 데이터가 없습니다.")
                 return
 
             success_count, error_count = 0, 0
-            for current_team_eval_id in period4_ids:
-                print(f"\n{'='*60}\n🚀 Period 4 최종 팀 평가 리포트 생성 시작 (ID: {current_team_eval_id})\n{'='*60}")
+            for current_team_eval_id in target_team_evaluation_ids:
+                print(f"\n{'='*60}\n🚀 연말 팀 평가 리포트 생성 시작 (ID: {current_team_eval_id})\n{'='*60}")
                 try:
                     team_data = fetch_team_evaluation_data(engine, current_team_eval_id)
                     final_report = generate_team_evaluation_report(team_data)
@@ -396,10 +458,10 @@ def main(team_evaluation_id: Optional[int] = None):
                     continue
                 time.sleep(0.5)
                 
-            print(f"\n🎉 Period 4 최종 팀 평가 리포트 생성 완료!")
+            print(f"\n🎉 연말 팀 평가 리포트 생성 완료!")
             print(f"✅ 성공: {success_count}개")
             print(f"❌ 실패: {error_count}개")
-            print(f"📊 총 처리: {len(period4_ids)}개")
+            print(f"📊 총 처리: {len(target_team_evaluation_ids)}개")
             
         else:
             # 특정 팀 평가만 처리

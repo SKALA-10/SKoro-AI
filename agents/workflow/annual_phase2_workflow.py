@@ -168,10 +168,10 @@ def run_phase5_reports(period_id: int, teams):
     from agents.report.annual_individual_reports import main as generate_annual_individual_reports
     generate_annual_individual_reports(period_id=period_id, teams=teams)
     
-    # 2. 팀별 리포트 생성 (나중에 추가 예정)
-    # logging.info("[Phase5] 연말 팀별 리포트 생성 시작")
-    # from agents.report.annual_team_reports import main as generate_annual_team_reports
-    # generate_annual_team_reports(period_id=period_id, teams=teams)
+    # 2. 팀별 리포트 생성
+    logging.info("[Phase5] 연말 팀별 리포트 생성 시작")
+    from agents.report.annual_team_reports import main as generate_annual_team_reports
+    generate_annual_team_reports(period_id=period_id, teams=teams)
     
     logging.info("Phase5: 연말 리포트 생성 완료!")
 
