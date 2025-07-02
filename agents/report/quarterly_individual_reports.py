@@ -51,29 +51,50 @@ def fetch_all_feedback_report_ids(engine: Engine) -> List[str]:
     print(f"✅ 총 {len(emp_nos)}개의 개인 평가 리포트를 생성합니다. 대상 직원: {emp_nos}")
     return emp_nos
 
-def fetch_feedback_basic_data(engine: Engine, emp_no: str) -> Optional[Row]:
+def fetch_feedback_basic_data(engine: Engine, emp_no: str, period_id: Optional[int] = None) -> Optional[Row]:
     """
     개인 평가의 기본 데이터를 조회합니다.
     """
     try:
-        query = text("""
-            SELECT
-                e.emp_no, e.emp_name, e.cl, e.position,
-                t.team_name, p.period_id, p.period_name,
-                fr.ai_achievement_rate,
-                fr.ai_overall_contribution_summary_comment,
-                fr.ai_peer_talk_summary, fr.ai_4p_evaluation,
-                fr.ai_growth_coaching, fr.overall_comment
-            FROM feedback_reports fr
-            JOIN employees e ON fr.emp_no = e.emp_no
-            JOIN team_evaluations te ON fr.team_evaluation_id = te.team_evaluation_id
-            JOIN teams t ON te.team_id = t.team_id
-            JOIN periods p ON te.period_id = p.period_id
-            WHERE fr.emp_no = :emp_no
-            LIMIT 1;
-        """)
+        if period_id:
+            query = text("""
+                SELECT
+                    e.emp_no, e.emp_name, e.cl, e.position,
+                    t.team_name, p.period_id, p.period_name,
+                    fr.ai_achievement_rate,
+                    fr.ai_overall_contribution_summary_comment,
+                    fr.ai_peer_talk_summary, fr.ai_4p_evaluation,
+                    fr.ai_growth_coaching, fr.overall_comment
+                FROM feedback_reports fr
+                JOIN employees e ON fr.emp_no = e.emp_no
+                JOIN team_evaluations te ON fr.team_evaluation_id = te.team_evaluation_id
+                JOIN teams t ON te.team_id = t.team_id
+                JOIN periods p ON te.period_id = p.period_id
+                WHERE fr.emp_no = :emp_no AND p.period_id = :period_id
+                LIMIT 1;
+            """)
+            params = {"emp_no": emp_no, "period_id": period_id}
+        else:
+            query = text("""
+                SELECT
+                    e.emp_no, e.emp_name, e.cl, e.position,
+                    t.team_name, p.period_id, p.period_name,
+                    fr.ai_achievement_rate,
+                    fr.ai_overall_contribution_summary_comment,
+                    fr.ai_peer_talk_summary, fr.ai_4p_evaluation,
+                    fr.ai_growth_coaching, fr.overall_comment
+                FROM feedback_reports fr
+                JOIN employees e ON fr.emp_no = e.emp_no
+                JOIN team_evaluations te ON fr.team_evaluation_id = te.team_evaluation_id
+                JOIN teams t ON te.team_id = t.team_id
+                JOIN periods p ON te.period_id = p.period_id
+                WHERE fr.emp_no = :emp_no
+                LIMIT 1;
+            """)
+            params = {"emp_no": emp_no}
+            
         with engine.connect() as connection:
-            result = connection.execute(query, {"emp_no": emp_no}).first()
+            result = connection.execute(query, params).first()
         if result:
             print(f"   - {emp_no}님 개인 평가 데이터 조회 완료: {result.emp_name}")
         return result
@@ -307,7 +328,7 @@ def generate_korean_feedback_report(
     return 한국어리포트
 
 # --- 3. DB 저장 및 메인 실행 함수 ---
-def save_feedback_json_report_to_db(engine: Engine, emp_no: str, json_report: Dict[str, Any]):
+def save_feedback_json_report_to_db(engine: Engine, emp_no: str, json_report: Dict[str, Any], period_id: Optional[int] = None):
     """
     생성된 JSON 리포트를 feedback_reports.report 컬럼에 저장합니다.
     """
@@ -317,12 +338,26 @@ def save_feedback_json_report_to_db(engine: Engine, emp_no: str, json_report: Di
         print(f"   - ❌ JSON 직렬화 오류: {e}")
         json_content = json.dumps(safe_convert_to_serializable(json_report), ensure_ascii=False, indent=2, default=str)
 
-    query = text("UPDATE feedback_reports SET report = :report_content WHERE emp_no = :emp_no;")
+    if period_id:
+        query = text("""
+            UPDATE feedback_reports 
+            SET report = :report_content 
+            WHERE emp_no = :emp_no 
+            AND team_evaluation_id IN (
+                SELECT te.team_evaluation_id 
+                FROM team_evaluations te 
+                WHERE te.period_id = :period_id
+            );
+        """)
+        params = {"report_content": json_content, "emp_no": emp_no, "period_id": period_id}
+    else:
+        query = text("UPDATE feedback_reports SET report = :report_content WHERE emp_no = :emp_no;")
+        params = {"report_content": json_content, "emp_no": emp_no}
     
     with engine.connect() as connection:
         with connection.begin() as transaction:
             try:
-                result = connection.execute(query, {"report_content": json_content, "emp_no": emp_no})
+                result = connection.execute(query, params)
                 if result.rowcount > 0:
                     transaction.commit()
                     print(f"   - ✅ {emp_no}님의 개인 평가 리포트가 feedback_reports.report에 성공적으로 저장되었습니다.")
@@ -348,12 +383,13 @@ def validate_korean_feedback_report(report: dict) -> bool:
     print(f"   - ✅ 개인 리포트 검증 성공!")
     return True
 
-def main(emp_no: Optional[str] = None):
+def main(emp_no: Optional[str] = None, period_id: Optional[int] = None):
     """
     메인 실행 함수: 개인 평가 리포트를 한국어 JSON으로 생성하고 DB에 저장합니다.
     
     Args:
         emp_no: 특정 직원 번호. None이면 모든 직원을 처리합니다.
+        period_id: 특정 분기 ID. None이면 모든 분기를 처리합니다.
     """
     try:
         engine = get_db_engine()
@@ -409,10 +445,12 @@ def main(emp_no: Optional[str] = None):
         else:
             # 특정 직원만 처리
             print(f"\n🎯 특정 직원 {emp_no}님 처리 시작")
+            if period_id:
+                print(f"📅 대상 분기: {period_id}")
             print(f"{'='*50}")
             
             try:
-                피드백기본데이터 = fetch_feedback_basic_data(engine, emp_no)
+                피드백기본데이터 = fetch_feedback_basic_data(engine, emp_no, period_id)
                 if not 피드백기본데이터:
                     print(f"❌ {emp_no}님의 개인 평가 데이터를 조회할 수 없습니다.")
                     return
@@ -428,7 +466,7 @@ def main(emp_no: Optional[str] = None):
                     print(f"❌ 개인 리포트 데이터 검증 실패")
                     return
 
-                save_feedback_json_report_to_db(engine, emp_no, 한국어리포트)
+                save_feedback_json_report_to_db(engine, emp_no, 한국어리포트, period_id)
                 print(f"\n✅ {emp_no}님 처리 완료!")
                 
             except Exception as e:
