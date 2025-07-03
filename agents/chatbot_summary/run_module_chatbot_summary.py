@@ -5,7 +5,7 @@
 import sys
 import os
 from dotenv import load_dotenv
-from agent import FeedbackSummaryAgent
+from .agent import FeedbackSummaryAgent
 
 # 환경변수 로드
 load_dotenv()
