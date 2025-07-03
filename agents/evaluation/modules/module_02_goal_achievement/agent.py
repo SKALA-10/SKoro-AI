@@ -137,6 +137,12 @@ def contribution_calculation_submodule(state: Module2State) -> Module2State:
             # 정성 평가: LLM 기반 상대 평가
             contributions = calculate_qualitative_contributions(kpi_id, state['period_id'], kpi_data)
         
+        # 🔧 추가: KPI별 기여도 합계 검증
+        total_contribution = sum(contributions.values())
+        if abs(total_contribution - 100) > 10:
+            raise DataIntegrityError(f"KPI {kpi_id}: 기여도 합계 {total_contribution:.1f}%가 100%에서 벗어남")
+        print(f"      ✅ KPI {kpi_id} 기여도 합계: {total_contribution:.1f}%")
+        
         # 하이브리드 1단계: 참여자 수 보정
         kpi_tasks = fetch_kpi_tasks(kpi_id, state['period_id'])
         participants_count = len(set(task['emp_no'] for task in kpi_tasks))
@@ -840,21 +846,6 @@ def validate_data_consistency(state: Module2State) -> List[str]:
     errors = []
     
     try:
-        # 1. 기여도 합계 검증 (KPI별)
-        for kpi_id in state['target_team_kpi_ids']:
-            kpi_tasks = fetch_kpi_tasks(kpi_id, state['period_id'])
-            total_contribution = 0
-            
-            for task in kpi_tasks:
-                task_data = fetch_cumulative_task_data(task['task_id'], state['period_id'])
-                contribution = task_data.get('ai_contribution_score', 0)
-                total_contribution += contribution
-            
-            # KPI별 기여도 합계가 100에 가까운지 확인 (정량평가인 경우)
-            evaluation_type = check_evaluation_type(kpi_id)
-            if evaluation_type == "quantitative" and abs(total_contribution - 100) > 10:
-                errors.append(f"KPI {kpi_id}: contribution sum {total_contribution} far from 100")
-        
         # 2. 달성률 범위 검증
         for task_id in state['updated_task_ids'] or []:
             task_data = fetch_cumulative_task_data(task_id, state['period_id'])
