@@ -1,20 +1,10 @@
-# ================================================================
-# db_utils_1.py - 모듈 9 데이터베이스 설정 및 연결 관리
-# ================================================================
-
-import sys
-import os
-import json
-from typing import Dict, List, Optional, Any
+# ai-performance-management-system/shared/tools/py
 from sqlalchemy import create_engine, text
 from sqlalchemy.engine import Row
+from typing import Dict, List, Optional, Any
 from decimal import Decimal
-from dotenv import load_dotenv
+import json
 
-load_dotenv()
-
-# DB 설정
-sys.path.append(os.path.abspath(os.path.join(os.getcwd(), '../../../..')))
 from config.settings import DatabaseConfig
 
 db_config = DatabaseConfig()

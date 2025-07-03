@@ -10,9 +10,6 @@ from typing import Dict, List
 from langchain_openai import ChatOpenAI
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.messages import SystemMessage, HumanMessage, AIMessage
-from dotenv import load_dotenv
-
-load_dotenv()
 
 # LLM 클라이언트 설정
 llm_client = ChatOpenAI(model="gpt-4o-mini", temperature=0)
@@ -164,7 +161,7 @@ def analyze_task_evidence_consistency(member: Dict) -> float:
         ]
         
         response = llm_client.invoke(messages)
-        response_text = response.content
+        response_text = str(response.content)  # 안전한 문자열 변환
         
         # JSON 추출 및 파싱
         json_text = _extract_json_from_llm_response(response_text)
@@ -241,7 +238,7 @@ def analyze_peer_evaluation_consistency(member: Dict) -> float:
         ]
         
         response = llm_client.invoke(messages)
-        response_text = response.content
+        response_text = str(response.content)  # 안전한 문자열 변환
         
         # JSON 추출 및 파싱
         json_text = _extract_json_from_llm_response(response_text)

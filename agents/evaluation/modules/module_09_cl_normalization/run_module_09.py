@@ -7,9 +7,9 @@ from typing import Dict, List
 from datetime import datetime
 from langchain_core.messages import HumanMessage
 
-from agent_1 import *
-from db_utils_1 import *
-from llm_utils_1 import *
+from agent import *
+from db_utils import *
+from llm_utils import *
 
 # 로깅 설정
 logging.basicConfig(level=logging.INFO)

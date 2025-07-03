@@ -14,8 +14,8 @@ from decimal import Decimal
 import math
 from datetime import datetime
 
-from db_utils_1 import *
-from llm_utils_1 import *
+from agents.evaluation.modules.module_09_cl_normalization.db_utils import *
+from agents.evaluation.modules.module_09_cl_normalization.llm_utils import *
 
 # 로깅 설정
 logger = logging.getLogger(__name__)
