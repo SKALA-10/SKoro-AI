@@ -4,8 +4,8 @@
 """
 
 from typing import List, Dict, Optional, Tuple
-from db_utils import DatabaseManager
-from llm_utils import LLMSummarizer
+from .db_utils import DatabaseManager
+from .llm_utils import LLMSummarizer
 
 
 class FeedbackSummaryAgent:
