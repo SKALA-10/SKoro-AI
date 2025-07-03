@@ -398,3 +398,19 @@ def batch_update_final_evaluation_reports(adjustments: List[Dict], period_id: in
                 "failed_count": len(adjustments),
                 "failed_members": [adj["emp_no"] for adj in adjustments]
             }
+        
+
+def get_all_headquarters_info() -> List[Dict]:
+    """모든 본부 정보 조회"""
+    with engine.connect() as connection:
+        query = text("""
+            SELECT DISTINCT h.headquarter_id, h.headquarter_name
+            FROM headquarters h
+            JOIN teams t ON h.headquarter_id = t.headquarter_id
+            JOIN employees e ON t.team_id = e.team_id
+            JOIN temp_evaluations te ON e.emp_no = te.emp_no
+            WHERE te.manager_score IS NOT NULL
+            ORDER BY h.headquarter_id
+        """)
+        results = connection.execute(query).fetchall()
+        return [row_to_dict(row) for row in results]

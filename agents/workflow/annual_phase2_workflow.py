@@ -35,9 +35,10 @@ from agents.evaluation.modules.module_08_team_comparision.agent import create_mo
 from agents.evaluation.modules.module_10_growth_coaching.agent import create_module10_graph
 from agents.evaluation.modules.module_11_team_coaching.agent import Module11TeamRiskManagementAgent
 from agents.evaluation.modules.module_11_team_coaching.db_utils import Module11DataAccess, SQLAlchemyDBWrapper, engine
-from agents.evaluation.modules.module_09_cl_normalization.run_module_09 import run_headquarter_module9_evaluation
-from agents.evaluation.modules.module_02_goal_achievement.db_utils import fetch_team_members, fetch_team_evaluation_id
 from agents.evaluation.modules.module_09_cl_normalization.db_utils import get_all_headquarters_info
+from agents.evaluation.modules.module_09_cl_normalization.run_module_09 import run_enhanced_module9_workflow_fixed
+from agents.evaluation.modules.module_02_goal_achievement.db_utils import fetch_team_members, fetch_team_evaluation_id
+
 import asyncio
 import sys
 
@@ -83,8 +84,8 @@ def run_module8(period_id: int, teams):
     logging.info("[Module8] 팀 성과 비교 완료")
 
 def run_module9(period_id: int):
-    """모듈9: 부문별 CL 정규화 실행"""
-    logging.info("[Module9] 부문별 CL 정규화 실행 시작")
+    """모듈9: 부문별 CL 정규화 실행 (향상된 버전)"""
+    logging.info("[Module9] 부문별 CL 정규화 실행 시작 (향상된 버전)")
     try:
         headquarters = get_all_headquarters_info()
         logging.info(f"[Module9] 대상 본부: {len(headquarters)}개")
@@ -93,11 +94,13 @@ def run_module9(period_id: int):
             headquarter_name = hq["headquarter_name"]
             try:
                 logging.info(f"[Module9] 본부 {headquarter_id} ({headquarter_name}) 실행 시작")
-                result = run_headquarter_module9_evaluation(headquarter_id, period_id)
-                if result:
-                    logging.info(f"[Module9] 본부 {headquarter_id} 완료: {result.get('processed_count', 0)}명 처리")
+                # headquarter_id를 정수로 변환 (새로운 버전은 int를 요구함)
+                headquarter_id_int = int(headquarter_id) if isinstance(headquarter_id, str) else headquarter_id
+                result = run_enhanced_module9_workflow_fixed(headquarter_id_int, period_id)
+                if result and result.get("success"):
+                    logging.info(f"[Module9] 본부 {headquarter_id} 완료: {result.get('total_processed', 0)}명 처리")
                 else:
-                    logging.error(f"[Module9] 본부 {headquarter_id} 실패")
+                    logging.error(f"[Module9] 본부 {headquarter_id} 실패: {result.get('error', 'Unknown error')}")
             except Exception as e:
                 logging.error(f"[Module9] 본부 {headquarter_id} 실패: {e}")
         logging.info("[Module9] 부문별 CL 정규화 완료")
