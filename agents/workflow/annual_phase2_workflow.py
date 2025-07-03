@@ -19,6 +19,11 @@
 #   python agents/workflow/annual_phase2_workflow.py --period-id 4 --auto --teams 1,3,5
 # Phase5만 실행 (연말 리포트 생성):
 #   python agents/workflow/annual_phase2_workflow.py --period-id 4 --phase5-only
+# 특정 모듈만 실행:
+#   python agents/workflow/annual_phase2_workflow.py --period-id 4 --module 8 --teams 1
+#   python agents/workflow/annual_phase2_workflow.py --period-id 4 --module 9
+#   python agents/workflow/annual_phase2_workflow.py --period-id 4 --module 10 --teams 1
+#   python agents/workflow/annual_phase2_workflow.py --period-id 4 --module 11 --teams 1
 # =====================================
 
 import argparse
@@ -57,17 +62,13 @@ def check_all_teams_submitted(teams, period_id):
     logging.info(f"팀장 제출 상태 체크: {count}개 팀이 아직 SUBMITTED 미달성")
     return count == 0
 
-# Phase 4: 전사 모듈8,9,10,11 (순차)
-def run_phase4_all_modules(period_id: int, teams):
-    """
-    Phase4: 전사 모듈8(팀 성과 비교), 9(부문 정규화), 10(개인 성장 코칭), 11(팀 리스크) 실행
-    """
-    logging.info("Phase4: 전사 모듈8,9,10,11 실행 시작")
-    logging.info(f"[Phase4] 전체 대상 팀: {teams}")
-
-    # 1. 모듈8: 팀 성과 비교 (팀 단위)
+# 개별 모듈 실행 함수들
+def run_module8(period_id: int, teams):
+    """모듈8: 팀 성과 비교 실행"""
+    logging.info("[Module8] 팀 성과 비교 실행 시작")
     for team_id in teams:
-        def module8_func(team_id, period_id):
+        try:
+            logging.info(f"[Module8] 팀 {team_id} 실행 시작")
             module8_graph = create_module8_graph()
             state8 = {
                 "team_id": team_id,
@@ -76,39 +77,45 @@ def run_phase4_all_modules(period_id: int, teams):
                 "messages": []
             }
             module8_graph.invoke(state8)
-            return True
-        run_team_module_with_retry(team_id, module8_func, period_id)
+            logging.info(f"[Module8] 팀 {team_id} 완료")
+        except Exception as e:
+            logging.error(f"[Module8] 팀 {team_id} 실패: {e}")
+    logging.info("[Module8] 팀 성과 비교 완료")
 
-    # 2. 모듈9: 부문 정규화 (본부별)
+def run_module9(period_id: int):
+    """모듈9: 부문별 CL 정규화 실행"""
+    logging.info("[Module9] 부문별 CL 정규화 실행 시작")
     try:
-        logging.info(f"[Phase4][모듈9] 본부별 CL 정규화 실행 시작")
         headquarters = get_all_headquarters_info()
-        logging.info(f"[Phase4][모듈9] 대상 본부: {len(headquarters)}개")
+        logging.info(f"[Module9] 대상 본부: {len(headquarters)}개")
         for hq in headquarters:
             headquarter_id = hq["headquarter_id"]
             headquarter_name = hq["headquarter_name"]
             try:
-                logging.info(f"[Phase4][모듈9] 본부 {headquarter_id} ({headquarter_name}) 실행 시작")
+                logging.info(f"[Module9] 본부 {headquarter_id} ({headquarter_name}) 실행 시작")
                 result = run_headquarter_module9_evaluation(headquarter_id, period_id)
                 if result:
-                    logging.info(f"[Phase4][모듈9] 본부 {headquarter_id} 완료: {result.get('processed_count', 0)}명 처리")
+                    logging.info(f"[Module9] 본부 {headquarter_id} 완료: {result.get('processed_count', 0)}명 처리")
                 else:
-                    logging.error(f"[Phase4][모듈9] 본부 {headquarter_id} 실패")
+                    logging.error(f"[Module9] 본부 {headquarter_id} 실패")
             except Exception as e:
-                logging.error(f"[Phase4][모듈9] 본부 {headquarter_id} 실패: {e}")
-        logging.info(f"[Phase4][모듈9] 본부별 CL 정규화 완료")
+                logging.error(f"[Module9] 본부 {headquarter_id} 실패: {e}")
+        logging.info("[Module9] 부문별 CL 정규화 완료")
     except Exception as e:
-        logging.error(f"[Phase4][모듈9] 본부별 CL 정규화 실패: {e}")
+        logging.error(f"[Module9] 부문별 CL 정규화 실패: {e}")
 
-    # 3. 모듈10: 개인 성장 코칭 (팀원별)
+def run_module10(period_id: int, teams):
+    """모듈10: 개인 성장 코칭 실행"""
+    logging.info("[Module10] 개인 성장 코칭 실행 시작")
     for team_id in teams:
-        def module10_func(team_id, period_id):
+        try:
             members = fetch_team_members(team_id)
             for member in members:
                 # 팀장 제외
                 if member.get('role') == 'MANAGER':
                     continue
                 emp_no = member["emp_no"]
+                logging.info(f"[Module10] 팀 {team_id} - {emp_no} 실행 시작")
                 module10_graph = create_module10_graph()
                 state10 = {
                     "emp_no": emp_no,
@@ -133,28 +140,50 @@ def run_phase4_all_modules(period_id: int, teams):
                     "error_messages": []
                 }
                 module10_graph.invoke(state10)
-            return True
-        run_team_module_with_retry(team_id, module10_func, period_id)
+                logging.info(f"[Module10] 팀 {team_id} - {emp_no} 완료")
+        except Exception as e:
+            logging.error(f"[Module10] 팀 {team_id} 실패: {e}")
+    logging.info("[Module10] 개인 성장 코칭 완료")
+
+async def run_module11(period_id: int, teams):
+    """모듈11: 팀 리스크 분석 실행"""
+    logging.info("[Module11] 팀 리스크 분석 실행 시작")
+    db_wrapper = SQLAlchemyDBWrapper(engine)
+    data_access = Module11DataAccess(db_wrapper)
+    agent11 = Module11TeamRiskManagementAgent(data_access)
+    tasks = []
+    for team_id in teams:
+        try:
+            team_evaluation_id = fetch_team_evaluation_id(team_id, period_id)
+            if not team_evaluation_id:
+                logging.error(f"[Module11] 팀 {team_id} team_evaluation_id 없음")
+                continue
+            logging.info(f"[Module11] 팀 {team_id} 실행 시작")
+            tasks.append(agent11.execute(team_id, period_id, team_evaluation_id))
+        except Exception as e:
+            logging.error(f"[Module11] 팀 {team_id} 실패: {e}")
+    await asyncio.gather(*tasks)
+    logging.info("[Module11] 팀 리스크 분석 완료")
+
+# Phase 4: 전사 모듈8,9,10,11 (순차)
+def run_phase4_all_modules(period_id: int, teams):
+    """
+    Phase4: 전사 모듈8(팀 성과 비교), 9(부문 정규화), 10(개인 성장 코칭), 11(팀 리스크) 실행
+    """
+    logging.info("Phase4: 전사 모듈8,9,10,11 실행 시작")
+    logging.info(f"[Phase4] 전체 대상 팀: {teams}")
+
+    # 1. 모듈8: 팀 성과 비교 (팀 단위)
+    run_module8(period_id, teams)
+
+    # 2. 모듈9: 부문 정규화 (본부별)
+    run_module9(period_id)
+
+    # 3. 모듈10: 개인 성장 코칭 (팀원별)
+    run_module10(period_id, teams)
 
     # 4. 모듈11: 팀 리스크 (팀 단위, async)
-    async def run_module11_for_all_teams():
-        db_wrapper = SQLAlchemyDBWrapper(engine)
-        data_access = Module11DataAccess(db_wrapper)
-        agent11 = Module11TeamRiskManagementAgent(data_access)
-        tasks = []
-        for team_id in teams:
-            try:
-                team_evaluation_id = fetch_team_evaluation_id(team_id, period_id)
-                if not team_evaluation_id:
-                    logging.error(f"[Phase4][모듈11] 팀 {team_id} team_evaluation_id 없음")
-                    continue
-                tasks.append(agent11.execute(team_id, period_id, team_evaluation_id))
-            except Exception as e:
-                logging.error(f"[Phase4][모듈11] 팀 {team_id} 실패: {e}")
-        await asyncio.gather(*tasks)
-        logging.info("[Phase4][모듈11] 전체 완료")
-
-    asyncio.run(run_module11_for_all_teams())
+    asyncio.run(run_module11(period_id, teams))
     logging.info("Phase4: 완료")
 
 def run_phase5_reports(period_id: int, teams):
@@ -204,36 +233,84 @@ def run_auto_workflow(period_id: int, specific_teams=None):
     logging.info("[AUTO] 연말 2단계 평가 자동 실행 완료!")
 
 def main():
-    parser = argparse.ArgumentParser()
-    parser.add_argument('--period-id', type=int, required=True)
-    parser.add_argument('--teams', help='1,2,3 or all', required=False, default=None)
+    parser = argparse.ArgumentParser(
+        description="연말 2단계 평가 워크플로우",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+사용 예시:
+  # 전체 자동 실행
+  python agents/workflow/annual_phase2_workflow.py --period-id 4 --auto
+  
+  # 특정 팀만 자동 실행
+  python agents/workflow/annual_phase2_workflow.py --period-id 4 --auto --teams 1
+  
+  # Phase5만 실행 (연말 리포트 생성)
+  python agents/workflow/annual_phase2_workflow.py --period-id 4 --phase5-only
+  
+  # 특정 모듈만 실행
+  python agents/workflow/annual_phase2_workflow.py --period-id 4 --module 8 --teams 1
+  python agents/workflow/annual_phase2_workflow.py --period-id 4 --module 9
+  python agents/workflow/annual_phase2_workflow.py --period-id 4 --module 10 --teams 1
+  python agents/workflow/annual_phase2_workflow.py --period-id 4 --module 11 --teams 1
+        """
+    )
+    parser.add_argument('--period-id', type=int, required=True, help='연말 기간 ID (예: 4)')
+    parser.add_argument('--teams', help='팀 ID (예: 1,2,3 또는 all)', required=False, default=None)
     parser.add_argument('--auto', action='store_true', help='모든 단계 자동 실행')
     parser.add_argument('--phase5-only', action='store_true', help='Phase5(연말 리포트 생성)만 실행')
+    parser.add_argument('--module', type=int, choices=[8, 9, 10, 11], help='특정 모듈만 실행')
     args = parser.parse_args()
+
+    # 팀 목록 파싱
+    if args.teams and args.teams != 'all':
+        team_list = parse_teams(args.teams)
+    else:
+        team_list = None
 
     # --phase5-only 옵션: Phase5만 실행
     if args.phase5_only:
-        if args.teams and args.teams != 'all':
-            team_list = parse_teams(args.teams)
+        if team_list:
             logging.info(f"[Phase5-Only] 지정된 팀만 Phase5 실행: {team_list}")
         else:
-            team_list = None
             logging.info("[Phase5-Only] 전체 팀 Phase5 실행")
         run_phase5_reports(args.period_id, team_list)
         sys.exit(0)
 
     # --auto 옵션: 전체 or 특정 팀만 자동 실행
     if args.auto:
-        if args.teams and args.teams != 'all':
-            team_list = parse_teams(args.teams)
+        if team_list:
             logging.info(f"[AUTO] 지정된 팀만 자동 실행: {team_list}")
         else:
-            team_list = None
             logging.info("[AUTO] 전체 팀 자동 실행")
         run_auto_workflow(args.period_id, team_list)
         sys.exit(0)
 
-    teams = get_target_teams(args.period_id, parse_teams(args.teams))
+    # --module 옵션: 특정 모듈만 실행
+    if args.module:
+        teams = get_target_teams(args.period_id, team_list)
+        logging.info(f"[Module{args.module}] {len(teams)}개 팀 실행")
+        
+        if args.module == 8:
+            # 모듈8: 팀 성과 비교
+            run_module8(args.period_id, teams)
+        
+        elif args.module == 9:
+            # 모듈9: 부문별 CL 정규화 (팀 지정 불필요)
+            run_module9(args.period_id)
+        
+        elif args.module == 10:
+            # 모듈10: 개인 성장 코칭
+            run_module10(args.period_id, teams)
+        
+        elif args.module == 11:
+            # 모듈11: 팀 리스크 분석
+            asyncio.run(run_module11(args.period_id, teams))
+        
+        logging.info(f"[Module{args.module}] 완료!")
+        sys.exit(0)
+
+    # 기본 실행: Phase4 + Phase5 순차 실행
+    teams = get_target_teams(args.period_id, team_list)
     logging.info(f"🚀 연말 2단계 평가 시작: {len(teams)}개 팀")
 
     # 팀장 제출 상태 확인
