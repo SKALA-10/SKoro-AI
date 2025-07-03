@@ -1266,10 +1266,22 @@ def cl_supervisor_execution_submodule(state: Module9AgentState) -> Module9AgentS
             if validation_result["performance_reversal"]["has_reversal"]:
                 print(f"   ⚠️ 성과 역전: {validation_result['performance_reversal']['reversal_count']}건")
             
-            # 6. DB 업데이트
+            # 6. DB 업데이트 (점수)
             update_result = batch_update_final_evaluation_reports(adjustments, period_id)
             
-            # 7. 결과 저장
+            # 7. 팀별 순위 업데이트 (새로 추가)
+            print(f"🏆 {cl_group}: 팀별 순위 업데이트 시작...")
+            try:
+                ranking_result = update_team_rankings(period_id)
+                if ranking_result["success_count"] > 0:
+                    print(f"   ✅ 순위 업데이트 완료: {ranking_result['success_count']}/{ranking_result['total_teams']}개 팀 성공")
+                else:
+                    print(f"   ⚠️ 순위 업데이트 실패: {ranking_result.get('error', '알 수 없는 오류')}")
+            except Exception as ranking_error:
+                print(f"   ❌ 순위 업데이트 중 오류: {str(ranking_error)}")
+                ranking_result = {"success_count": 0, "error": str(ranking_error)}
+            
+            # 8. 결과 저장
             supervisor_results[cl_group] = {
                 "success": True,
                 "adjustments_made": update_result["success_count"],
@@ -1280,6 +1292,7 @@ def cl_supervisor_execution_submodule(state: Module9AgentState) -> Module9AgentS
                 "update_failed_count": update_result["failed_count"],
                 "validation_result": validation_result,
                 "supervisor_output": supervisor_output,
+                "ranking_update": ranking_result,
                 "enhanced_features": {
                     "llm_zero_sum_used": not fallback_used,
                     "math_stdev_applied": True,
@@ -1289,7 +1302,7 @@ def cl_supervisor_execution_submodule(state: Module9AgentState) -> Module9AgentS
             
             total_adjustments += update_result["success_count"]
             
-            print(f"✅ {cl_group} 2단계 처리 완료: {update_result['success_count']}명 조정")
+            print(f"✅ {cl_group} 2단계 처리 완료: {update_result['success_count']}명 조정, 순위 업데이트 완료")
         
         # State 업데이트
         updated_state = state.copy()

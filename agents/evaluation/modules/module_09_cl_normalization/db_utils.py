@@ -211,6 +211,138 @@ def get_all_cl_groups_in_headquarter(headquarter_id: int, period_id: int) -> Lis
 # DB 업데이트 함수
 # ================================================================
 
+def update_team_rankings(period_id: int) -> Dict:
+    """팀별 독립 순위 업데이트 (같은 점수는 같은 순위: 1, 2, 2, 4 형태)"""
+    
+    success_count = 0
+    failed_teams = []
+    total_teams = 0
+    
+    with engine.connect() as connection:
+        try:
+            # 1. 해당 기간의 모든 팀 조회
+            teams_query = text("""
+                SELECT DISTINCT t.team_id, t.team_name
+                FROM teams t
+                JOIN team_evaluations tea ON t.team_id = tea.team_id
+                JOIN final_evaluation_reports fer ON tea.team_evaluation_id = fer.team_evaluation_id
+                WHERE tea.period_id = :period_id
+                  AND fer.score IS NOT NULL
+                ORDER BY t.team_id
+            """)
+            
+            teams = connection.execute(teams_query, {"period_id": period_id}).fetchall()
+            total_teams = len(teams)
+            
+            print(f"📊 팀별 순위 업데이트 시작: {total_teams}개 팀")
+            
+            for team in teams:
+                team_id = team.team_id
+                team_name = team.team_name
+                
+                try:
+                    # 2. 각 팀별로 순위 계산 및 업데이트
+                    ranking_query = text("""
+                        UPDATE final_evaluation_reports fer
+                        SET ranking = (
+                            SELECT rank_num
+                            FROM (
+                                SELECT 
+                                    emp_no,
+                                    RANK() OVER (
+                                        PARTITION BY t2.team_id 
+                                        ORDER BY fer2.score DESC, fer2.emp_no ASC
+                                    ) as rank_num
+                                FROM final_evaluation_reports fer2
+                                JOIN team_evaluations tea2 ON fer2.team_evaluation_id = tea2.team_evaluation_id
+                                JOIN teams t2 ON tea2.team_id = t2.team_id
+                                WHERE t2.team_id = :team_id 
+                                  AND tea2.period_id = :period_id
+                                  AND fer2.score IS NOT NULL
+                            ) ranked
+                            WHERE ranked.emp_no = fer.emp_no
+                        )
+                        WHERE fer.team_evaluation_id IN (
+                            SELECT tea.team_evaluation_id 
+                            FROM team_evaluations tea 
+                            WHERE tea.team_id = :team_id 
+                              AND tea.period_id = :period_id
+                        )
+                    """)
+                    
+                    result = connection.execute(ranking_query, {
+                        "team_id": team_id,
+                        "period_id": period_id
+                    })
+                    
+                    # 3. 업데이트된 행 수 확인
+                    updated_rows = result.rowcount
+                    
+                    if updated_rows > 0:
+                        success_count += 1
+                        print(f"   ✅ {team_name} (팀ID: {team_id}): {updated_rows}명 순위 업데이트")
+                        
+                        # 4. 순위 결과 확인 (디버깅용)
+                        check_query = text("""
+                            SELECT 
+                                fer.emp_no,
+                                fer.score,
+                                fer.ranking,
+                                e.emp_name
+                            FROM final_evaluation_reports fer
+                            JOIN team_evaluations tea ON fer.team_evaluation_id = tea.team_evaluation_id
+                            JOIN employees e ON fer.emp_no = e.emp_no
+                            WHERE tea.team_id = :team_id 
+                              AND tea.period_id = :period_id
+                              AND fer.score IS NOT NULL
+                            ORDER BY fer.ranking ASC, fer.emp_no ASC
+                        """)
+                        
+                        rankings = connection.execute(check_query, {
+                            "team_id": team_id,
+                            "period_id": period_id
+                        }).fetchall()
+                        
+                        # 상위 3명만 출력
+                        for i, rank in enumerate(rankings[:3]):
+                            print(f"     {rank.ranking}위: {rank.emp_no} ({rank.emp_name}) - {rank.score:.2f}점")
+                        
+                    else:
+                        failed_teams.append(team_name)
+                        print(f"   ⚠️ {team_name} (팀ID: {team_id}): 순위 업데이트 실패 (업데이트된 행 없음)")
+                        
+                except Exception as e:
+                    failed_teams.append(team_name)
+                    print(f"   ❌ {team_name} (팀ID: {team_id}): 순위 업데이트 실패 - {str(e)}")
+            
+            connection.commit()
+            
+            success_rate = (success_count / total_teams * 100) if total_teams > 0 else 0
+            print(f"💾 팀별 순위 업데이트 완료: {success_count}/{total_teams}개 팀 성공 ({success_rate:.1f}%)")
+            
+            if failed_teams:
+                print(f"   ❌ 실패한 팀: {', '.join(failed_teams)}")
+            
+            return {
+                "success_count": success_count,
+                "failed_count": len(failed_teams),
+                "total_teams": total_teams,
+                "success_rate": round(success_rate, 1),
+                "failed_teams": failed_teams
+            }
+            
+        except Exception as e:
+            print(f"❌ 팀별 순위 업데이트 실패: {str(e)}")
+            connection.rollback()
+            return {
+                "success_count": 0,
+                "failed_count": total_teams,
+                "total_teams": total_teams,
+                "success_rate": 0.0,
+                "failed_teams": [team.team_name for team in teams] if 'teams' in locals() else [],
+                "error": str(e)
+            }
+
 def batch_update_final_evaluation_reports(adjustments: List[Dict], period_id: int) -> Dict:
     """CL 그룹의 조정 결과를 final_evaluation_reports에 실제 업데이트"""
     
