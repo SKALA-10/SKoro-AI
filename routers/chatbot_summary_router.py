@@ -6,6 +6,6 @@ router = APIRouter()
 chatbot_summary_service = ChatbotSummaryService()
 
 # 평가 피드백 요약
-@router.post("/", response_model=ChatbotSummaryResponse, summary="평가 피드백 요약")
+@router.post("", response_model=ChatbotSummaryResponse, summary="평가 피드백 요약")
 def run_summary_for_all_teams():
     return chatbot_summary_service.run_summary_for_all_teams()

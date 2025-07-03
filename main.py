@@ -23,7 +23,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# 라우터
+# 라우터1
 api_router = APIRouter()
 
 api_router.include_router(evaluation_router.router, prefix="/evaluation")
