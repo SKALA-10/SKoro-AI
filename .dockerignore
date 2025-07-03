@@ -1,0 +1,30 @@
+# Python 관련
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.venv/
+env/
+*.log
+
+# 데이터/모델/결과 파일
+data/
+checkpoints/
+outputs/
+*.csv
+*.tsv
+*.pt
+*.pth
+
+# Git
+.git/
+.gitignore
+
+# OS 및 에디터 관련
+.DS_Store
+.vscode/
+.idea/
+
+# Dockerfile 제외하지 않도록 주의!
+!Dockerfile
+!requirements.txt
