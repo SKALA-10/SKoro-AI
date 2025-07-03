@@ -21,9 +21,11 @@ llm_client = ChatOpenAI(model="gpt-4o-mini", temperature=0)
 def generate_team_consistency_guide(team_id: int, period_id: int) -> Dict:
     """팀 단위 일관성 가이드 생성 - 우리가 상의한 방식"""
     team_members = fetch_team_members(team_id)
-    team_avg_rate = calculate_team_average_achievement_rate(
-        [kpi_id for kpi_id in range(1, 10)]  # 임시로 KPI ID 범위
-    )
+    
+    # 실제 팀의 KPI ID 조회
+    _, team_kpi_ids = fetch_team_tasks_and_kpis(team_id, period_id)
+    
+    team_avg_rate = calculate_team_average_achievement_rate(team_kpi_ids)
     
     # 팀 성과 수준에 따른 가이드라인 결정
     if team_avg_rate >= 90:
