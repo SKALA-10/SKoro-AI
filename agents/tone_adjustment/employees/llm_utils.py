@@ -55,7 +55,7 @@ def safe_json_loads(raw_text: str) -> dict:
     return reconstruct_json_from_text(raw_text)
 
 def reconstruct_json_from_text(raw_text: str) -> dict:
-    """텍스트에서 JSON 데이터 재구성"""
+    """텍스트에서 JSON 데이터 재구성 - 팀원용 연말 레포트 구조에 맞게 수정"""
     try:
         # 기본 정보 추출
         name = extract_value(r'"성명":\s*"([^"]+)"', raw_text, "알 수 없음")
@@ -63,19 +63,49 @@ def reconstruct_json_from_text(raw_text: str) -> dict:
         dept = extract_value(r'"소속":\s*"([^"]+)"', raw_text, "")
         period = extract_value(r'"업무_수행_기간":\s*"([^"]+)"', raw_text, "")
         
-        # 수치 데이터 추출
-        achievement_rate = extract_number(r'"개인_종합_달성률":\s*(\d+)', raw_text, 0)
+        # 최종_평가 섹션 추출
+        final_score = extract_float(r'"최종_점수":\s*([0-9.]+)', raw_text, 0.0)
+        achievement_score = extract_float(r'"업적":\s*([0-9.]+)', raw_text, 0.0)
+        passionate_score = extract_float(r'"Passionate":\s*([0-9.]+)', raw_text, 0.0)
+        proactive_score = extract_float(r'"Proactive":\s*([0-9.]+)', raw_text, 0.0)
+        professional_score = extract_float(r'"Professional":\s*([0-9.]+)', raw_text, 0.0)
+        people_score = extract_float(r'"People":\s*([0-9.]+)', raw_text, 0.0)
+        performance_summary = extract_value(r'"성과_요약":\s*"([^"]*(?:\\.[^"]*)*)"', raw_text, f"{name}님의 성과 요약")
         
-        # Task 데이터 추출 (여러 개 가능)
-        task_patterns = list(re.finditer(r'"Task명":\s*"([^"]+)"', raw_text))
+        # 분기별_업무_기여도 추출
+        quarterly_contributions = []
+        quarters = ["1분기", "2분기", "3분기", "4분기"]
+        
+        for quarter in quarters:
+            quarter_pattern = rf'"{quarter}"[^}}]*?}}'
+            quarter_match = re.search(quarter_pattern, raw_text, re.DOTALL)
+            
+            if quarter_match:
+                quarter_section = quarter_match.group(0)
+                rank = extract_number(r'"순위":\s*(\d+)', quarter_section, 1)
+                achievement_rate = extract_number(r'"달성률":\s*(\d+)', quarter_section, 0)
+                summary = extract_value(r'"실적_요약":\s*"([^"]*(?:\\.[^"]*)*)"', quarter_section, f"{quarter} 성과")
+                
+                # 실적_요약 글자수 제한 (300자)
+                if len(summary) > 300:
+                    summary = summary[:300] + "..."
+                
+                quarterly_contributions.append({
+                    "분기": quarter,
+                    "순위": rank,
+                    "달성률": achievement_rate,
+                    "실적_요약": summary
+                })
+        
+        # 팀_업무_목표_및_개인_달성률 추출
         tasks = []
+        task_patterns = list(re.finditer(r'"Task명":\s*"([^"]+)"', raw_text))
         
         for i, task_match in enumerate(task_patterns[:3]):  # 최대 3개까지
             task_name = task_match.group(1)
             
-            # 해당 Task의 다른 정보들 추출
+            # 해당 Task의 섹션 범위 결정
             start_pos = task_match.start()
-            # 다음 Task 시작점 또는 섹션 끝까지
             if i + 1 < len(task_patterns):
                 end_pos = task_patterns[i + 1].start()
             else:
@@ -85,45 +115,40 @@ def reconstruct_json_from_text(raw_text: str) -> dict:
             
             task_section = raw_text[start_pos:end_pos]
             
-            core_task = extract_value(r'"핵심 Task":\s*"([^"]*(?:\\.[^"]*)*)"', task_section, "업무 진행 중")
-            task_rate = extract_number(r'"누적 달성률 \(%\)":\s*(\d+)', task_section, 0)
-            comment = extract_value(r'"분석 코멘트":\s*"([^"]*(?:\\.[^"]*)*)"', task_section, f"{name}님의 업무 성과")
+            core_task = extract_value(r'"핵심_?Task":\s*"([^"]*(?:\\.[^"]*)*)"', task_section, "업무 진행 중")
+            task_rate = extract_number(r'"누적_달성률.*?":\s*(\d+)', task_section, 0)
+            comment = extract_value(r'"분석_?코멘트":\s*"([^"]*(?:\\.[^"]*)*)"', task_section, f"{name}님의 {task_name} 성과")
             
-            # 긴 텍스트는 안전하게 자르기
-            if len(core_task) > 500:
-                core_task = core_task[:500] + "..."
-            if len(comment) > 1000:
-                comment = comment[:1000] + "..."
+            # 분석_코멘트 글자수 제한 (230자)
+            if len(comment) > 240:
+                comment = comment[:230] + "..."
             
             tasks.append({
                 "Task명": task_name,
-                "핵심 Task": core_task,
-                "누적 달성률 (%)": task_rate,
-                "분석 코멘트": comment
+                "핵심_Task": core_task,
+                "누적_달성률(%)": task_rate,
+                "분석_코멘트": comment
             })
         
-        # Peer Talk 추출
+        # 개인_종합_달성률 추출
+        overall_achievement = extract_number(r'"개인_종합_달성률":\s*(\d+)', raw_text, 0)
+        overall_comment = extract_value(r'"종합_기여_코멘트":\s*"([^"]*(?:\\.[^"]*)*)"', raw_text, f"{name}님의 종합 기여")
+        
+        # Peer_Talk 추출
         strength = extract_value(r'"강점":\s*"([^"]*(?:\\.[^"]*)*)"', raw_text, "팀워크 우수")
         concern = extract_value(r'"우려":\s*"([^"]*(?:\\.[^"]*)*)"', raw_text, "지속적인 성장 필요")
         collaboration = extract_value(r'"협업_관찰":\s*"([^"]*(?:\\.[^"]*)*)"', raw_text, "동료들과 원활한 협업")
         
-        # 4P 평가 추출
-        passionate = extract_value(r'"Passionate":\s*"([^"]*(?:\\.[^"]*)*)"', raw_text, "업무에 대한 열정")
-        proactive = extract_value(r'"Proactive":\s*"([^"]*(?:\\.[^"]*)*)"', raw_text, "능동적인 업무 수행")
-        professional = extract_value(r'"Professional":\s*"([^"]*(?:\\.[^"]*)*)"', raw_text, "전문성 기반 업무")
-        people = extract_value(r'"People":\s*"([^"]*(?:\\.[^"]*)*)"', raw_text, "우수한 대인관계")
-        overall_eval = extract_value(r'"종합_평가":\s*"([^"]*(?:\\.[^"]*)*)"', raw_text, "우수한 역량")
-        
-        # 성장 제안 추출
+        # 성장_제안_및_개선_피드백 추출
         growth_points = []
         improvement_areas = []
         recommended_activities = []
         
-        # 배열 데이터는 간단하게 처리
+        # 배열 데이터 추출
         growth_section = extract_value(r'"성장_포인트":\s*\[(.*?)\]', raw_text, "")
         if growth_section:
             growth_matches = re.findall(r'"([^"]*(?:\\.[^"]*)*)"', growth_section)
-            growth_points = growth_matches[:3]  # 최대 3개
+            growth_points = growth_matches[:3]
         
         improvement_section = extract_value(r'"보완_영역":\s*\[(.*?)\]', raw_text, "")
         if improvement_section:
@@ -135,14 +160,11 @@ def reconstruct_json_from_text(raw_text: str) -> dict:
             activity_matches = re.findall(r'"([^"]*(?:\\.[^"]*)*)"', activity_section)
             recommended_activities = activity_matches[:3]
         
-        # 총평 추출 (안전하게)
-        total_comment = extract_value(r'"총평":\s*"([^"]*(?:\\.[^"]*)*)"', raw_text, "")
-        if len(total_comment) > 1000:
-            total_comment = total_comment[:1000] + "..."
-        if not total_comment:
-            total_comment = f"{name}님의 이번 분기 성과는 우수합니다."
+        # 팀장_Comment와 종합_Comment 추출
+        manager_comment = extract_value(r'"팀장_Comment":\s*"([^"]*(?:\\.[^"]*)*)"', raw_text, f"{name}님, 수고하셨습니다!")
+        total_comment = extract_value(r'"종합_Comment":\s*"([^"]*(?:\\.[^"]*)*)"', raw_text, f"{name}님의 연말 평가 총평입니다.")
         
-        # 안전한 JSON 구조 생성
+        # 팀원용 연말 레포트 JSON 구조 생성
         reconstructed_json = {
             "기본_정보": {
                 "성명": name,
@@ -150,10 +172,22 @@ def reconstruct_json_from_text(raw_text: str) -> dict:
                 "소속": dept,
                 "업무_수행_기간": period
             },
+            "최종_평가": {
+                "최종_점수": final_score,
+                "업적": achievement_score,
+                "SK_Values": {
+                    "Passionate": passionate_score,
+                    "Proactive": proactive_score,
+                    "Professional": professional_score,
+                    "People": people_score
+                },
+                "성과_요약": performance_summary
+            },
+            "분기별_업무_기여도": quarterly_contributions,
             "팀_업무_목표_및_개인_달성률": {
                 "업무표": tasks,
-                "개인_종합_달성률": achievement_rate,
-                "종합_기여_코멘트": f"{name}님은 팀의 목표 달성에 기여하고 있습니다.",
+                "개인_종합_달성률": overall_achievement,
+                "종합_기여_코멘트": overall_comment,
                 "해석_기준": "달성률 90% 이상: 우수, 80-89%: 양호, 70-79%: 보통, 70% 미만: 개선 필요"
             },
             "Peer_Talk": {
@@ -161,22 +195,16 @@ def reconstruct_json_from_text(raw_text: str) -> dict:
                 "우려": concern,
                 "협업_관찰": collaboration
             },
-            "업무_실행_및_태도": {
-                "Passionate": passionate,
-                "Proactive": proactive,
-                "Professional": professional,
-                "People": people,
-                "종합_평가": overall_eval
-            },
             "성장_제안_및_개선_피드백": {
                 "성장_포인트": growth_points if growth_points else [f"{name}님의 전문성 확대 가능"],
                 "보완_영역": improvement_areas if improvement_areas else ["지속적인 학습 필요"],
                 "추천_활동": recommended_activities if recommended_activities else ["팀 내 지식 공유"]
             },
-            "총평": total_comment
+            "팀장_Comment": manager_comment,
+            "종합_Comment": total_comment
         }
         
-        print(f"✅ JSON 재구성 완료: {name}")
+        print(f"✅ 팀원용 연말 레포트 JSON 재구성 완료: {name}")
         return reconstructed_json
         
     except Exception as e:
@@ -189,6 +217,18 @@ def reconstruct_json_from_text(raw_text: str) -> dict:
                 "소속": "",
                 "업무_수행_기간": ""
             },
+            "최종_평가": {
+                "최종_점수": 0.0,
+                "업적": 0.0,
+                "SK_Values": {
+                    "Passionate": 0.0,
+                    "Proactive": 0.0,
+                    "Professional": 0.0,
+                    "People": 0.0
+                },
+                "성과_요약": "데이터 처리 중 오류 발생"
+            },
+            "분기별_업무_기여도": [],
             "팀_업무_목표_및_개인_달성률": {
                 "업무표": [],
                 "개인_종합_달성률": 0,
@@ -200,19 +240,13 @@ def reconstruct_json_from_text(raw_text: str) -> dict:
                 "우려": "데이터 오류",
                 "협업_관찰": "데이터 오류"
             },
-            "업무_실행_및_태도": {
-                "Passionate": "데이터 오류",
-                "Proactive": "데이터 오류", 
-                "Professional": "데이터 오류",
-                "People": "데이터 오류",
-                "종합_평가": "데이터 오류"
-            },
             "성장_제안_및_개선_피드백": {
                 "성장_포인트": ["데이터 오류"],
                 "보완_영역": ["데이터 오류"],
                 "추천_활동": ["데이터 오류"]
             },
-            "총평": "데이터 처리 중 오류가 발생했습니다."
+            "팀장_Comment": "데이터 처리 중 오류가 발생했습니다.",
+            "종합_Comment": "데이터 처리 중 오류가 발생했습니다."
         }
 
 class LLMClient:
@@ -387,4 +421,4 @@ class LLMClient:
             
         except Exception as e:
             print(f"LLM API 오류: {e}")
-            return report_text
+            return report_text  # 오류 시 원본 반환
