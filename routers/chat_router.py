@@ -6,6 +6,8 @@ from services.chat_service import ChatService
 router = APIRouter()
 chat_service = ChatService() 
 
+router = APIRouter(tags=["챗봇"])
+
 # 챗봇 SKoro와 대화
 @router.post("/skoro", response_model=ChatResponse, summary="SKoro와 대화")
 def chat_with_skoro(request: ChatRequest):

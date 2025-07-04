@@ -5,6 +5,8 @@ from schemas.evaluation import EvaluationRequest, EvaluationResponse
 router = APIRouter()
 evaluation_service = EvaluationService()
 
+router = APIRouter(tags=["평가"])
+
 # 분기 평가 시작
 @router.post("/quarterly", response_model=EvaluationResponse, summary="분기 평가 시작")
 def start_quarterly_evaluation(request: EvaluationRequest):
