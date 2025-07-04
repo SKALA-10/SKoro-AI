@@ -1,3 +1,4 @@
+
 import json
 import re
 from typing import Dict, Any, List, Optional
@@ -5,67 +6,67 @@ from langchain_openai import ChatOpenAI
 from langchain.schema import HumanMessage, SystemMessage
 
 # ================================================================
-# 필드 매핑 설정
+# 필드 매핑 설정 (간소화된 키 매핑으로 수정)
 # ================================================================
 
-# 톤 조정이 필요한 필드
+# 톤 조정이 필요한 필드 (실제 추출되는 키로 변경)
 INDIVIDUAL_TONE_ADJUSTMENT_FIELDS = {
     "feedback_reports": [
-        "팀_업무_목표_및_개인_달성률.업무표[].분석 코멘트",
-        "팀_업무_목표_및_개인_달성률.종합_기여_코멘트", 
-        "총평",
-        "Peer_Talk.강점",
-        "Peer_Talk.우려",
-        "Peer_Talk.협업_관찰",
-        "업무_실행_및_태도.종합_평가",
-        "성장_제안_및_개선_피드백.성장_포인트[]",
-        "성장_제안_및_개선_피드백.보완_영역[]",
-        "성장_제안_및_개선_피드백.추천_활동[]"
+        "분석 코멘트",      # 업무표 배열 항목
+        "종합_기여_코멘트",  # 단일 필드
+        "총평",            # 단일 필드
+        "강점",            # Peer_Talk 하위
+        "우려",            # Peer_Talk 하위
+        "협업_관찰",        # Peer_Talk 하위
+        "종합_평가",        # 업무_실행_및_태도 하위
+        "성장_포인트",      # 배열 항목
+        "보완_영역",        # 배열 항목
+        "추천_활동"         # 배열 항목
     ],
     
     "final_evaluation_reports": [
-        "최종_평가.성과_요약",
-        "분기별_업무_기여도[].실적_요약",
-        "팀_업무_목표_및_개인_달성률.업무표[].분석_코멘트",
-        "팀_업무_목표_및_개인_달성률.종합_기여_코멘트",
-        "팀장_Comment",
-        "종합_Comment",
-        "Peer_Talk.강점",
-        "Peer_Talk.우려", 
-        "Peer_Talk.협업_관찰",
-        "성장_제안_및_개선_피드백.성장_포인트[]",
-        "성장_제안_및_개선_피드백.보완_영역[]",
-        "성장_제안_및_개선_피드백.추천_활동[]"
+        "성과_요약",        # 최종_평가 하위
+        "실적_요약",        # 분기별_업무_기여도 배열 항목
+        "분석_코멘트",      # 업무표 배열 항목 (연말에는 분석_코멘트)
+        "종합_기여_코멘트",  # 단일 필드
+        "팀장_Comment",     # 단일 필드
+        "종합_Comment",     # 단일 필드
+        "강점",            # Peer_Talk 하위
+        "우려",            # Peer_Talk 하위
+        "협업_관찰",        # Peer_Talk 하위
+        "성장_포인트",      # 배열 항목
+        "보완_영역",        # 배열 항목
+        "추천_활동"         # 배열 항목
     ]
 }
 
-# 길이 조정이 필요한 필드
+# 길이 조정이 필요한 필드 (간소화된 키로 매핑)
 INDIVIDUAL_LENGTH_ADJUSTMENT_TARGETS = {
     "feedback_reports": {
-        "팀_업무_목표_및_개인_달성률.업무표[].분석_코멘트": 240,
-        "팀_업무_목표_및_개인_달성률.종합_기여_코멘트": 250,
+        "분석 코멘트": 240,      # 업무표 각 항목
+        "종합_기여_코멘트": 250,
         "총평": 300,
-        "Peer_Talk.강점": 150,
-        "Peer_Talk.우려": 150,
-        "Peer_Talk.협업_관찰": 150,
-        "성장_제안_및_개선_피드백.성장_포인트[]": 100,
-        "성장_제안_및_개선_피드백.보완_영역[]": 100,
-        "성장_제안_및_개선_피드백.추천_활동[]": 120
+        "강점": 150,
+        "우려": 150,
+        "협업_관찰": 150,
+        "성장_포인트": 100,      # 각 배열 항목
+        "보완_영역": 100,
+        "추천_활동": 120
     },
     
     "final_evaluation_reports": {
-        "최종_평가.성과_요약": 300,
-        "분기별_업무_기여도[].실적_요약": 280,
-        "팀_업무_목표_및_개인_달성률.업무표[].분석_코멘트": 200,
-        "팀_업무_목표_및_개인_달성률.종합_기여_코멘트": 250,
+        "성과_요약": 300,
+        "실적_요약": 280,        # 각 분기별 항목
+        "분석_코멘트": 200,      # 업무표 각 항목
+        "종합_기여_코멘트": 250,
         "팀장_Comment": 200,
         "종합_Comment": 300,
-        "Peer_Talk.강점": 150,
-        "Peer_Talk.우려": 150,
-        "Peer_Talk.협업_관찰": 150,
-        "성장_제안_및_개선_피드백.성장_포인트[]": 100,
-        "성장_제안_및_개선_피드백.보완_영역[]": 100,
-        "성장_제안_및_개선_피드백.추천_활동[]": 120
+        "강점": 150,
+        "우려": 150,
+        "협업_관찰": 150,
+        "성장_포인트": 100,
+        "보완_영역": 100,
+        "추천_활동": 120
     }
 }
 
@@ -74,7 +75,7 @@ INDIVIDUAL_LENGTH_ADJUSTMENT_TARGETS = {
 # ================================================================
 
 class IndividualToneAdjustmentAgent:
-    """개인용 톤 조정 및 길이 조절 Agent"""
+    """개인용 톤 조정 및 길이 조절 Agent (길이 제한 문제 해결)"""
     
     def __init__(self, llm_client: ChatOpenAI):
         self.llm_client = llm_client
@@ -85,7 +86,7 @@ class IndividualToneAdjustmentAgent:
         """개인용 레포트 톤 조정 및 길이 조절"""
         print(f"🎯 개인용 레포트 톤 조정 시작: {report_type}")
         
-        # 1. 필드 분류
+        # 1. 필드 분류 (간소화된 키로)
         tone_fields = set(self.tone_fields[report_type])
         length_fields = set(self.length_targets[report_type].keys())
         
@@ -125,80 +126,83 @@ class IndividualToneAdjustmentAgent:
         print(f"✅ 개인용 톤 조정 완료: {len(adjusted_fields)}개 필드 처리")
         return result_json
     
-    def extract_fields(self, report_json: Dict[str, Any], field_paths: set) -> Dict[str, str]:
-        """JSON에서 지정된 필드들 추출"""
+    def extract_fields(self, report_json: Dict[str, Any], target_field_keys: set) -> Dict[str, str]:
+        """간소화된 키로 필드들 추출"""
         extracted = {}
         
-        for field_path in field_paths:
-            value = self.get_field_value(report_json, field_path)
-            if value and isinstance(value, str) and len(value.strip()) > 10:
-                extracted[field_path] = value
-                print(f"    ✅ 추출: {field_path} ({len(value)}자)")
+        def extract_recursive(data, path="", parent_key=""):
+            """재귀적으로 모든 필드 추출"""
+            if isinstance(data, dict):
+                for key, value in data.items():
+                    current_path = f"{path}.{key}" if path else key
+                    
+                    # 타겟 키 직접 매칭
+                    if key in target_field_keys and isinstance(value, str) and len(value.strip()) > 10:
+                        field_id = f"{current_path}" if current_path not in extracted else f"{current_path}_{len(extracted)}"
+                        extracted[field_id] = value
+                        print(f"    ✅ 추출: {key} -> {field_id} ({len(value)}자)")
+                    
+                    # 재귀 탐색
+                    extract_recursive(value, current_path, key)
+                    
+            elif isinstance(data, list):
+                for idx, item in enumerate(data):
+                    if isinstance(item, dict):
+                        # 배열 항목의 각 필드 확인
+                        for key, value in item.items():
+                            if key in target_field_keys and isinstance(value, str) and len(value.strip()) > 10:
+                                field_id = f"{path}[{idx}].{key}"
+                                extracted[field_id] = value
+                                print(f"    ✅ 배열 추출: {key}[{idx}] -> {field_id} ({len(value)}자)")
+                    elif isinstance(item, str) and parent_key in target_field_keys and len(item.strip()) > 10:
+                        # 문자열 배열 항목
+                        field_id = f"{path}[{idx}]"
+                        extracted[field_id] = item
+                        print(f"    ✅ 문자열 배열 추출: {parent_key}[{idx}] -> {field_id} ({len(item)}자)")
         
+        extract_recursive(report_json)
         return extracted
     
-    def get_field_value(self, data: Dict[str, Any], field_path: str) -> Optional[str]:
-        """JSON에서 경로로 필드 값 추출"""
-        try:
-            parts = field_path.split('.')
-            current = data
-            
-            for i, part in enumerate(parts):
-                if '[]' in part:
-                    # 배열 처리
-                    key = part.replace('[]', '')
-                    if key in current and isinstance(current[key], list):
-                        # 배열의 모든 항목을 합쳐서 반환
-                        items = []
-                        for item in current[key]:
-                            if isinstance(item, str):
-                                items.append(item)
-                            elif isinstance(item, dict):
-                                # 마지막 부분이 있다면 해당 필드 추출
-                                if i + 1 < len(parts):
-                                    remaining_path = '.'.join(parts[i+1:])
-                                    sub_value = self.get_field_value(item, remaining_path)
-                                    if sub_value:
-                                        items.append(sub_value)
-                                else:
-                                    items.append(str(item))
-                        return '\n'.join(items) if items else None
-                else:
-                    if part in current:
-                        current = current[part]
-                    else:
-                        return None
-            
-            if isinstance(current, (str, int, float, bool)):
-                return str(current)
-            elif current is None:
-                return None
-            else:
-                return str(current)
-            
-        except Exception as e:
-            print(f"    ⚠️ 필드 추출 실패 {field_path}: {e}")
-            return None
-    
     def adjust_tone_and_length(self, fields_data: Dict[str, str], report_type: str) -> Dict[str, str]:
-        """톤 조정 + 길이 조절 (한번에 처리)"""
+        """톤 조정 + 길이 조절 (수정된 버전)"""
         if not fields_data:
             return {}
         
-        # 길이 제한 정보 수집
+        # 길이 제한 정보 수집 - 수정된 로직
         length_limits = {}
         for field_path, content in fields_data.items():
-            if field_path in self.length_targets[report_type]:
-                length_limits[field_path] = self.length_targets[report_type][field_path]
+            # 필드 키 추출 (경로에서 마지막 부분)
+            field_key = self.extract_field_key(field_path)
+            
+            if field_key in self.length_targets[report_type]:
+                length_limits[field_path] = self.length_targets[report_type][field_key]
+                print(f"    🔍 길이 제한 매칭: {field_path} ({field_key}) -> {self.length_targets[report_type][field_key]}자")
+        
+        print(f"    📏 길이 제한 설정: {length_limits}")
+        
+        if not length_limits:
+            print("    ⚠️ 길이 제한이 매칭되지 않았습니다. 톤만 조정합니다.")
+            return self.adjust_tone_only(fields_data)
         
         prompt = self.build_tone_and_length_prompt(fields_data, length_limits)
         
         try:
             response = self.llm_call(prompt)
-            return self.parse_llm_response(response, set(fields_data.keys()))
+            result = self.parse_llm_response(response, set(fields_data.keys()))
+            
+            # 길이 제한 확인 (강제 조정 제거)
+            for field_path, content in result.items():
+                if field_path in length_limits:
+                    target_length = length_limits[field_path]
+                    if len(content) > target_length:
+                        print(f"      ⚠️ 길이 초과: {field_path} ({len(content)}자 > {target_length}자)")
+                    else:
+                        print(f"      ✅ 길이 적절: {field_path} ({len(content)}자 ≤ {target_length}자)")
+            
+            return result
         except Exception as e:
             print(f"    ❌ 톤+길이 조정 실패: {e}")
-            return fields_data  # 원본 반환
+            return fields_data
     
     def adjust_tone_only(self, fields_data: Dict[str, str]) -> Dict[str, str]:
         """톤 조정만"""
@@ -219,19 +223,51 @@ class IndividualToneAdjustmentAgent:
         if not fields_data:
             return {}
         
+        # 길이 제한 정보 수집
         length_limits = {}
         for field_path, content in fields_data.items():
-            if field_path in self.length_targets[report_type]:
-                length_limits[field_path] = self.length_targets[report_type][field_path]
+            field_key = self.extract_field_key(field_path)
+            if field_key in self.length_targets[report_type]:
+                length_limits[field_path] = self.length_targets[report_type][field_key]
         
         prompt = self.build_length_only_prompt(fields_data, length_limits)
         
         try:
             response = self.llm_call(prompt)
-            return self.parse_llm_response(response, set(fields_data.keys()))
+            result = self.parse_llm_response(response, set(fields_data.keys()))
+            
+            # 길이 제한 확인 (강제 조정 제거)
+            for field_path, content in result.items():
+                if field_path in length_limits:
+                    target_length = length_limits[field_path]
+                    if len(content) > target_length:
+                        print(f"      ⚠️ 길이 초과: {field_path} ({len(content)}자 > {target_length}자)")
+                    else:
+                        print(f"      ✅ 길이 적절: {field_path} ({len(content)}자 ≤ {target_length}자)")
+            
+            return result
         except Exception as e:
             print(f"    ❌ 길이 조정 실패: {e}")
             return fields_data
+    
+    def extract_field_key(self, field_path: str) -> str:
+        """필드 경로에서 실제 키 추출"""
+        # "팀_업무_목표_및_개인_달성률.업무표[0].분석 코멘트" -> "분석 코멘트"
+        # "성장_제안_및_개선_피드백.성장_포인트[0]" -> "성장_포인트"
+        # "총평" -> "총평"
+        
+        # 배열 인덱스 제거
+        path = re.sub(r'\[\d+\]', '', field_path)
+        
+        # 마지막 점 이후의 키 반환
+        if '.' in path:
+            return path.split('.')[-1]
+        else:
+            return path
+    
+    def check_length_compliance(self, text: str, target_length: int) -> bool:
+        """길이 준수 여부 확인"""
+        return len(text) <= target_length
     
     def build_tone_and_length_prompt(self, fields_data: Dict[str, str], length_limits: Dict[str, int]) -> str:
         """톤+길이 조정 프롬프트 생성"""
@@ -254,8 +290,11 @@ class IndividualToneAdjustmentAgent:
 
 4. **사번 제거**: (SK0002) 등 모든 사번 완전 제거
 
-## 길이 제한 (절대 준수)
+## 길이 제한 (절대 준수 - 매우 중요!)
 {self.format_length_limits(length_limits)}
+
+**⚠️ 매우 중요**: 각 필드는 반드시 지정된 글자수 이내로 작성해주세요. 
+글자수를 초과하면 안 됩니다. 핵심 내용만 남기고 불필요한 부분은 제거하세요.
 
 ## 조정할 텍스트
 {self.format_fields_data(fields_data)}
@@ -306,9 +345,10 @@ class IndividualToneAdjustmentAgent:
 
 ## 조정 원칙
 - 톤과 스타일은 그대로 유지
-- 핵심 내용 보존하면서 압축 또는 확장
+- 핵심 내용 보존하면서 압축
 - 사번 제거로 글자수 절약
 - 불필요한 연결어구 제거
+- **⚠️ 글자수를 초과하면 안 됩니다**
 
 ## 조정할 텍스트
 {self.format_fields_data(fields_data)}
@@ -327,20 +367,25 @@ class IndividualToneAdjustmentAgent:
         if not length_limits:
             return "- 길이 제한 없음"
         
-        return '\n'.join([f"- {field}: {limit}자 이내" for field, limit in length_limits.items()])
+        return '\n'.join([f"- {field}: {limit}자 이내 (현재: {len(self.get_current_content(field))}자)" 
+                         for field, limit in length_limits.items()])
+    
+    def get_current_content(self, field_path: str) -> str:
+        """현재 처리 중인 필드의 내용 반환 (길이 표시용)"""
+        return ""  # 단순화를 위해 빈 문자열 반환
     
     def format_fields_data(self, fields_data: Dict[str, str]) -> str:
         """필드 데이터 포맷팅"""
         formatted = []
         for field_path, content in fields_data.items():
-            formatted.append(f"[{field_path}] ({len(content)}자)\n{content}\n")
+            formatted.append(f"[{field_path}] (현재: {len(content)}자)\n{content}\n")
         return '\n'.join(formatted)
     
     def llm_call(self, prompt: str) -> str:
         """LLM 호출"""
         try:
             messages = [
-                SystemMessage(content="당신은 개인용 성과 레포트의 톤과 길이를 조정하는 전문가입니다."),
+                SystemMessage(content="당신은 개인용 성과 레포트의 톤과 길이를 조정하는 전문가입니다. 지정된 글자수 제한을 절대 준수해야 합니다. 글자수를 초과하면 안 됩니다."),
                 HumanMessage(content=prompt)
             ]
             
@@ -383,39 +428,56 @@ class IndividualToneAdjustmentAgent:
         result_json = json.loads(json.dumps(original_json))  # 깊은 복사
         
         for field_path, adjusted_content in adjusted_fields.items():
-            self.set_field_value(result_json, field_path, adjusted_content)
+            self.set_field_value_by_path(result_json, field_path, adjusted_content)
         
         return result_json
     
-    def set_field_value(self, data: Dict[str, Any], field_path: str, value: str):
-        """JSON에 조정된 값 설정"""
+    def set_field_value_by_path(self, data: Dict[str, Any], field_path: str, value: str):
+        """경로를 사용해 필드 값 설정"""
         try:
-            parts = field_path.split('.')
+            # 배열 인덱스 파싱
+            array_matches = re.findall(r'([^.\[]+)(?:\[(\d+)\])?', field_path)
+            
             current = data
             
-            # 마지막 부분 전까지 탐색
-            for part in parts[:-1]:
-                if '[]' in part:
-                    key = part.replace('[]', '')
-                    if key not in current:
-                        current[key] = []
-                    current = current[key]
+            for i, (key, index) in enumerate(array_matches):
+                if i == len(array_matches) - 1:
+                    # 마지막 키
+                    if index is not None:
+                        # 배열 항목
+                        if key in current and isinstance(current[key], list):
+                            idx = int(index)
+                            if idx < len(current[key]):
+                                current[key][idx] = value
+                                print(f"      💾 배열 설정: {field_path}")
+                            else:
+                                print(f"      ⚠️ 배열 인덱스 초과: {field_path}")
+                        else:
+                            print(f"      ⚠️ 배열 필드 없음: {key}")
+                    else:
+                        # 일반 필드
+                        current[key] = value
+                        print(f"      💾 필드 설정: {field_path}")
                 else:
-                    if part not in current:
-                        current[part] = {}
-                    current = current[part]
-            
-            # 마지막 필드에 값 설정
-            last_part = parts[-1]
-            if '[]' in last_part:
-                key = last_part.replace('[]', '')
-                if isinstance(current, list):
-                    # 배열인 경우 모든 항목 업데이트 (간단히 처리)
-                    pass
-            else:
-                current[last_part] = value
-                print(f"      💾 설정 완료: {field_path}")
-                
+                    # 중간 경로
+                    if index is not None:
+                        # 배열 탐색
+                        if key in current and isinstance(current[key], list):
+                            idx = int(index)
+                            if idx < len(current[key]):
+                                current = current[key][idx]
+                            else:
+                                print(f"      ⚠️ 중간 배열 인덱스 초과: {key}[{index}]")
+                                return
+                        else:
+                            print(f"      ⚠️ 중간 배열 필드 없음: {key}")
+                            return
+                    else:
+                        # 일반 객체 탐색
+                        if key not in current:
+                            current[key] = {}
+                        current = current[key]
+                        
         except Exception as e:
             print(f"    ⚠️ 필드 설정 실패 {field_path}: {e}")
 
@@ -423,20 +485,10 @@ class IndividualToneAdjustmentAgent:
 # 테스트 실행 함수
 # ================================================================
 
-
-
 def test_with_real_llm():
     """진짜 LLM을 사용한 테스트"""
-    print("🚀 진짜 LLM으로 개인용 톤 조정 Agent 테스트 시작")
-    
-    # 환경 변수 확인
-    import os
-    if not os.getenv("OPENAI_API_KEY"):
-        print("❌ OPENAI_API_KEY 환경변수가 설정되지 않았습니다.")
-        print("다음 명령어로 설정해주세요:")
-        print("export OPENAI_API_KEY='your-api-key-here'")
-        return
-    
+    print("🚀 길이 제한 문제 해결된 톤 조정 Agent 테스트 시작")
+
     # 샘플 데이터 (분기 개인 피드백)
     sample_feedback_report = {
             "기본_정보": {
