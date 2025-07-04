@@ -433,53 +433,83 @@ class IndividualToneAdjustmentAgent:
         return result_json
     
     def set_field_value_by_path(self, data: Dict[str, Any], field_path: str, value: str):
-        """경로를 사용해 필드 값 설정"""
+        """경로를 사용해 필드 값 설정 (개선된 버전)"""
         try:
-            # 배열 인덱스 파싱
-            array_matches = re.findall(r'([^.\[]+)(?:\[(\d+)\])?', field_path)
+            print(f"      🔧 필드 설정 시도: {field_path}")
             
+            # 경로를 점으로 분할
+            parts = field_path.split('.')
             current = data
             
-            for i, (key, index) in enumerate(array_matches):
-                if i == len(array_matches) - 1:
-                    # 마지막 키
-                    if index is not None:
-                        # 배열 항목
-                        if key in current and isinstance(current[key], list):
-                            idx = int(index)
-                            if idx < len(current[key]):
-                                current[key][idx] = value
-                                print(f"      💾 배열 설정: {field_path}")
+            for i, part in enumerate(parts):
+                if i == len(parts) - 1:
+                    # 마지막 부분 - 값 설정
+                    if '[' in part and ']' in part:
+                        # 배열 항목 처리
+                        if '.' in part:
+                            # "업무표[0].분석 코멘트" -> key="업무표", index=0, field="분석 코멘트"
+                            array_match = re.match(r'([^\[]+)\[(\d+)\]\.(.+)', part)
+                            if array_match:
+                                array_key, index, field_name = array_match.groups()
+                                if array_key in current and isinstance(current[array_key], list):
+                                    idx = int(index)
+                                    if idx < len(current[array_key]) and isinstance(current[array_key][idx], dict):
+                                        current[array_key][idx][field_name] = value
+                                        print(f"      ✅ 배열 필드 설정 성공: {field_path}")
+                                    else:
+                                        print(f"      ❌ 배열 항목 없음: {array_key}[{index}]")
+                                else:
+                                    print(f"      ❌ 배열 필드 없음: {array_key}")
                             else:
-                                print(f"      ⚠️ 배열 인덱스 초과: {field_path}")
+                                print(f"      ❌ 배열 패턴 매칭 실패: {part}")
                         else:
-                            print(f"      ⚠️ 배열 필드 없음: {key}")
+                            # "추천_활동[0]" -> key="추천_활동", index=0 (문자열 배열)
+                            array_match = re.match(r'([^\[]+)\[(\d+)\]', part)
+                            if array_match:
+                                array_key, index = array_match.groups()
+                                if array_key in current and isinstance(current[array_key], list):
+                                    idx = int(index)
+                                    if idx < len(current[array_key]):
+                                        current[array_key][idx] = value
+                                        print(f"      ✅ 문자열 배열 설정 성공: {field_path}")
+                                    else:
+                                        print(f"      ❌ 배열 인덱스 초과: {array_key}[{index}]")
+                                else:
+                                    print(f"      ❌ 배열 필드 없음: {array_key}")
+                            else:
+                                print(f"      ❌ 배열 패턴 매칭 실패: {part}")
                     else:
                         # 일반 필드
-                        current[key] = value
-                        print(f"      💾 필드 설정: {field_path}")
+                        current[part] = value
+                        print(f"      ✅ 일반 필드 설정 성공: {field_path}")
                 else:
-                    # 중간 경로
-                    if index is not None:
-                        # 배열 탐색
-                        if key in current and isinstance(current[key], list):
-                            idx = int(index)
-                            if idx < len(current[key]):
-                                current = current[key][idx]
+                    # 중간 경로 탐색
+                    if '[' in part and ']' in part:
+                        # 배열 탐색: "업무표[0]" -> key="업무표", index=0
+                        array_match = re.match(r'([^\[]+)\[(\d+)\]', part)
+                        if array_match:
+                            array_key, index = array_match.groups()
+                            if array_key in current and isinstance(current[array_key], list):
+                                idx = int(index)
+                                if idx < len(current[array_key]):
+                                    current = current[array_key][idx]
+                                else:
+                                    print(f"      ❌ 배열 인덱스 초과: {array_key}[{index}]")
+                                    return
                             else:
-                                print(f"      ⚠️ 중간 배열 인덱스 초과: {key}[{index}]")
+                                print(f"      ❌ 중간 배열 필드 없음: {array_key}")
                                 return
                         else:
-                            print(f"      ⚠️ 중간 배열 필드 없음: {key}")
+                            print(f"      ❌ 중간 배열 패턴 매칭 실패: {part}")
                             return
                     else:
                         # 일반 객체 탐색
-                        if key not in current:
-                            current[key] = {}
-                        current = current[key]
+                        if part not in current:
+                            current[part] = {}
+                        current = current[part]
                         
         except Exception as e:
-            print(f"    ⚠️ 필드 설정 실패 {field_path}: {e}")
+            print(f"      ❌ 필드 설정 실패 {field_path}: {e}")
 
 # ================================================================
 # 테스트 실행 함수
