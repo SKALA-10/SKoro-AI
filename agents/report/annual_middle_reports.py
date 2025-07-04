@@ -373,7 +373,7 @@ def generate_middle_evaluation_report(
     기본정보 = {
         "팀명": 팀평가기본데이터.team_name or "",
         "팀장명": 팀평가기본데이터.manager_name or "미지정",
-        "업무 수행 기간": 팀평가기본데이터.period_name or ""
+        "업무_수행_기간": 팀평가기본데이터.period_name or ""
     }
     
     # 2. 팀원 평가 요약표 (협업 네트워크와 통합)
@@ -411,27 +411,27 @@ def generate_middle_evaluation_report(
                 
                 팀원평가요약표.append({
                     "이름": member_name,
-                    "AI 추천 점수": ai_score,
-                    "총 Task 수": safe_convert_to_serializable(member_data.get("total_tasks", 0)),
+                    "AI_추천_점수": ai_score,
+                    "총_Task_수": safe_convert_to_serializable(member_data.get("total_tasks", 0)),
                     "협업률": f"{safe_convert_to_serializable(member_data.get('collaboration_rate', 0))}%",
-                    "핵심 협업자": member_data.get("key_collaborators", []),
-                    "팀 내 역할": member_data.get("team_role", ""),
-                    "Peer Talk 평가": member_data.get("peer_talk_summary", ""),
-                    "협업 편중도": f"{safe_convert_to_serializable(member_data.get('collaboration_bias', 0))}",
-                    "종합 평가": member_data.get("overall_evaluation", "")
+                    "핵심_협업자": member_data.get("key_collaborators", []),
+                    "팀_내_역할": member_data.get("team_role", ""),
+                    "Peer_Talk_평가": member_data.get("peer_talk_summary", ""),
+                    "협업_편중도": f"{safe_convert_to_serializable(member_data.get('collaboration_bias', 0))}",
+                    "종합_평가": member_data.get("overall_evaluation", "")
                 })
     else:
         # 협업 데이터가 없는 경우 기본 메시지
         팀원평가요약표.append({
             "이름": "협업 데이터 없음",
-            "AI 추천 점수": "데이터 없음",
-            "총 Task 수": "데이터 없음",
+            "AI_추천_점수": "데이터 없음",
+            "총_Task_수": "데이터 없음",
             "협업률": "데이터 없음",
-            "핵심 협업자": ["협업 매트릭스 데이터가 등록되지 않았습니다."],
-            "팀 내 역할": "데이터 등록 필요",
-            "Peer Talk 평가": "데이터 없음",
-            "협업 편중도": "데이터 없음",
-            "종합 평가": "협업 네트워크 분석을 위해서는 ai_collaboration_matrix 데이터가 필요합니다."
+            "핵심_협업자": ["협업 매트릭스 데이터가 등록되지 않았습니다."],
+            "팀_내_역할": "데이터 등록 필요",
+            "Peer_Talk_평가": "데이터 없음",
+            "협업_편중도": "데이터 없음",
+            "종합_평가": "협업 네트워크 분석을 위해서는 ai_collaboration_matrix 데이터가 필요합니다."
         })
         협업팀_요약 = "협업 네트워크 데이터가 등록되지 않아 분석이 불가능합니다."
     
@@ -459,7 +459,7 @@ def generate_middle_evaluation_report(
             기본내용 = {
                 "이름": member_info.emp_name or "",
                 "직무": member_info.position or "",
-                "CL레벨": format_cl_level(member_info.cl)
+                "CL_레벨": format_cl_level(member_info.cl)
             }
             print(f"     - 기본내용 완료: {기본내용['이름']}")
             
@@ -470,29 +470,29 @@ def generate_middle_evaluation_report(
             ai_점수_산출_기준 = {
                 "업적": {
                     "점수": safe_convert_to_serializable(raw_score_data.get("achievement_score", "데이터 없음")),
-                    "실적 요약": getattr(member_info, 'ai_annual_performance_summary_comment', '') or "실적 요약 데이터가 없습니다."
+                    "실적_요약": getattr(member_info, 'ai_annual_performance_summary_comment', '') or "실적 요약 데이터가 없습니다."
                 },
                 "SK_Values": {
                     "Passive": {
                         "점수": safe_convert_to_serializable(fourp_evaluation_data.get("passionate", {}).get("score", "데이터 없음")),
-                        "평가 근거": fourp_evaluation_data.get("passionate", {}).get("reasoning", "평가 근거 데이터가 없습니다.")
+                        "평가_근거": fourp_evaluation_data.get("passionate", {}).get("reasoning", "평가 근거 데이터가 없습니다.")
                     },
                     "Proactive": {
                         "점수": safe_convert_to_serializable(fourp_evaluation_data.get("proactive", {}).get("score", "데이터 없음")),
-                        "평가 근거": fourp_evaluation_data.get("proactive", {}).get("reasoning", "평가 근거 데이터가 없습니다.")
+                        "평가_근거": fourp_evaluation_data.get("proactive", {}).get("reasoning", "평가 근거 데이터가 없습니다.")
                     },
                     "Professional": {
                         "점수": safe_convert_to_serializable(fourp_evaluation_data.get("professional", {}).get("score", "데이터 없음")),
-                        "평가 근거": fourp_evaluation_data.get("professional", {}).get("reasoning", "평가 근거 데이터가 없습니다.")
+                        "평가_근거": fourp_evaluation_data.get("professional", {}).get("reasoning", "평가 근거 데이터가 없습니다.")
                     },
                     "People": {
                         "점수": safe_convert_to_serializable(fourp_evaluation_data.get("people", {}).get("score", "데이터 없음")),
-                        "평가 근거": fourp_evaluation_data.get("people", {}).get("reasoning", "평가 근거 데이터가 없습니다.")
+                        "평가_근거": fourp_evaluation_data.get("people", {}).get("reasoning", "평가 근거 데이터가 없습니다.")
                     }
                 },
-                "종합 원점수": safe_convert_to_serializable(raw_score_data.get("raw_hybrid_score", "데이터 없음")),
-                "AI 추천 점수 (CL 정규화)": safe_convert_to_serializable(getattr(member_info, 'ai_recommended_score', 'N/A')),
-                "평가 근거 요약": getattr(member_info, 'key_contribution_summary', '') or "평가 근거 요약이 없습니다."
+                "종합_원점수": safe_convert_to_serializable(raw_score_data.get("raw_hybrid_score", "데이터 없음")),
+                "AI_추천_점수_CL_정규화": safe_convert_to_serializable(getattr(member_info, 'ai_recommended_score', 'N/A')),
+                "평가_근거_요약": getattr(member_info, 'key_contribution_summary', '') or "평가 근거 요약이 없습니다."
             }
             print(f"     - AI 점수 산출 기준 완료")
             
@@ -502,23 +502,23 @@ def generate_middle_evaluation_report(
                 for task in tasks:
                     연간_핵심_성과_표.append({
                         "Task명": task.task_name or "",
-                        "핵심 Task": task.task_performance or "",
-                        "누적 달성률 (%)": safe_convert_to_serializable(task.ai_achievement_rate),
-                        "분석 코멘트": task.ai_analysis_comment_task or ""
+                        "핵심_Task": task.task_performance or "",
+                        "누적_달성률_퍼센트": safe_convert_to_serializable(task.ai_achievement_rate),
+                        "분석_코멘트": task.ai_analysis_comment_task or ""
                     })
             else:
                 # Task 데이터가 없는 경우 기본 메시지
                 연간_핵심_성과_표.append({
                     "Task명": "Task 데이터 없음",
-                    "핵심 Task": "Period 4 Task 데이터가 등록되지 않았습니다.",
-                    "누적 달성률 (%)": "데이터 없음",
-                    "분석 코멘트": "Task 등록 후 데이터 확인이 필요합니다."
+                    "핵심_Task": "Period 4 Task 데이터가 등록되지 않았습니다.",
+                    "누적_달성률_퍼센트": "데이터 없음",
+                    "분석_코멘트": "Task 등록 후 데이터 확인이 필요합니다."
                 })
             
             연간_핵심_성과_기여도 = {
                 "Task_표": 연간_핵심_성과_표,
-                "개인 종합 달성률": safe_convert_to_serializable(getattr(member_info, 'ai_achievement_rate', None)) if getattr(member_info, 'ai_achievement_rate', None) else "데이터 없음",
-                "종합 기여 코멘트": getattr(member_info, 'ai_overall_contribution_summary_comment', '') or "종합 기여 코멘트 데이터가 없습니다."
+                "개인_종합_달성률": safe_convert_to_serializable(getattr(member_info, 'ai_achievement_rate', None)) if getattr(member_info, 'ai_achievement_rate', None) else "데이터 없음",
+                "종합_기여_코멘트": getattr(member_info, 'ai_overall_contribution_summary_comment', '') or "종합 기여 코멘트 데이터가 없습니다."
             }
             print(f"     - 연간 핵심 성과 기여도 완료")
             
@@ -533,14 +533,14 @@ def generate_middle_evaluation_report(
                 peer_talk_섹션 = {
                     "강점": peer_talk_data.get('strengths', []) if peer_talk_data.get('strengths') else ["강점 데이터가 등록되지 않았습니다."],
                     "우려": peer_talk_data.get('concerns', []) if peer_talk_data.get('concerns') else ["우려 데이터가 등록되지 않았습니다."],
-                    "협업 관찰": peer_talk_data.get('collaboration_observations', '') if peer_talk_data.get('collaboration_observations') else "협업 관찰 데이터가 등록되지 않았습니다."
+                    "협업_관찰": peer_talk_data.get('collaboration_observations', '') if peer_talk_data.get('collaboration_observations') else "협업 관찰 데이터가 등록되지 않았습니다."
                 }
             else:
                 print(f"     - Peer Talk 데이터가 없음")
                 peer_talk_섹션 = {
                     "강점": ["Peer Talk 데이터가 feedback_reports.ai_peer_talk_summary에 등록되지 않았습니다."],
                     "우려": ["Peer Talk 데이터가 feedback_reports.ai_peer_talk_summary에 등록되지 않았습니다."],
-                    "협업 관찰": "Peer Talk 데이터가 feedback_reports.ai_peer_talk_summary에 등록되지 않았습니다."
+                    "협업_관찰": "Peer Talk 데이터가 feedback_reports.ai_peer_talk_summary에 등록되지 않았습니다."
                 }
             
             print(f"     - Peer Talk 섹션 완료: {peer_talk_섹션}")

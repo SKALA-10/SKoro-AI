@@ -176,10 +176,10 @@ def fetch_quarterly_performance(engine: Engine, emp_no: str) -> List[Dict]:
     """
     # 1~4분기 기본 구조 먼저 생성
     base_quarters = [
-        {"분기": "1분기", "달성률": 0, "실적 요약": ""},
-        {"분기": "2분기", "달성률": 0, "실적 요약": ""},
-        {"분기": "3분기", "달성률": 0, "실적 요약": ""},
-        {"분기": "4분기", "달성률": 0, "실적 요약": ""}
+        {"분기": "1분기", "달성률": 0, "실적_요약": ""},
+        {"분기": "2분기", "달성률": 0, "실적_요약": ""},
+        {"분기": "3분기", "달성률": 0, "실적_요약": ""},
+        {"분기": "4분기", "달성률": 0, "실적_요약": ""}
     ]
     
     quarterly_data = base_quarters.copy()
@@ -220,7 +220,7 @@ def fetch_quarterly_performance(engine: Engine, emp_no: str) -> List[Dict]:
                 quarterly_data[quarter_index] = {
                     "분기": f"{quarter_index + 1}분기",
                     "달성률": result.achievement_rate or 0,
-                    "실적 요약": result.performance_summary or ""
+                    "실적_요약": result.performance_summary or ""
                 }
         
     except Exception as e:
@@ -301,7 +301,7 @@ def parse_4p_evaluation_text(evaluation_text: str) -> Dict[str, str]:
         "Proactive": "", 
         "Professional": "",
         "People": "",
-        "종합 평가": ""
+        "종합_평가": ""
     }
     
     if not evaluation_text:
@@ -320,7 +320,7 @@ def parse_4p_evaluation_text(evaluation_text: str) -> Dict[str, str]:
         elif line.startswith('* People'):
             result["People"] = line.replace('* People 협업 기여: ', '').replace('* People', '').strip()
         elif line.startswith('* 종합 평가'):
-            result["종합 평가"] = line.replace('* 종합 평가: ', '').strip()
+            result["종합_평가"] = line.replace('* 종합 평가: ', '').strip()
     
     return result
 
@@ -352,15 +352,15 @@ def generate_korean_feedback_report(
     업무표 = [
         {
             "Task명": t.task_name or "",
-            "핵심 Task": t.task_performance or "",
-            "누적 달성률 (%)": safe_convert_to_serializable(t.ai_achievement_rate),
-            "분석 코멘트": t.ai_analysis_comment_task or ""
+            "핵심_Task": t.task_performance or "",
+            "누적_달성률_퍼센트": safe_convert_to_serializable(t.ai_achievement_rate),
+            "분석_코멘트": t.ai_analysis_comment_task or ""
         }
         for t in 업무데이터
     ]
     
     # 누적 달성률이 높은 순으로 정렬 (None 값은 0으로 처리)
-    업무표.sort(key=lambda x: float(x["누적 달성률 (%)"]) if x["누적 달성률 (%)"] is not None else 0, reverse=True)
+    업무표.sort(key=lambda x: float(x["누적_달성률_퍼센트"]) if x["누적_달성률_퍼센트"] is not None else 0, reverse=True)
 
     한국어리포트 = {
         "기본_정보": {
@@ -385,7 +385,7 @@ def generate_korean_feedback_report(
             "Proactive": fourp_파싱데이터.get('Proactive', ''), 
             "Professional": fourp_파싱데이터.get('Professional', ''),
             "People": fourp_파싱데이터.get('People', ''),
-            "종합_평가": fourp_파싱데이터.get('종합 평가', '')
+            "종합_평가": fourp_파싱데이터.get('종합_평가', '')
         },
         "성장_제안_및_개선_피드백": {
             "성장_포인트": growth_데이터.get('growth_points', []),

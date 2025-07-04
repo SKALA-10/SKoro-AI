@@ -246,13 +246,13 @@ def generate_korean_team_evaluation_report(
         if isinstance(member_data, dict):
             협업_네트워크_상세.append({
                 "이름": member_data.get("name", ""),
-                "총 Task 수": safe_convert_to_serializable(member_data.get("total_tasks", 0)),
+                "총_Task_수": safe_convert_to_serializable(member_data.get("total_tasks", 0)),
                 "협업률": f"{safe_convert_to_serializable(member_data.get('collaboration_rate', 0))}%",
-                "핵심 협업자": member_data.get("key_collaborators", []),
-                "팀 내 역할": member_data.get("team_role", ""),
-                "Peer Talk 평가": member_data.get("peer_talk_summary", ""),
-                "협업 편중도": f"{safe_convert_to_serializable(member_data.get('collaboration_bias', 0))}",
-                "종합 평가": member_data.get("overall_evaluation", "")
+                "핵심_협업자": member_data.get("key_collaborators", []),
+                "팀_내_역할": member_data.get("team_role", ""),
+                "Peer_Talk_평가": member_data.get("peer_talk_summary", ""),
+                "협업_편중도": f"{safe_convert_to_serializable(member_data.get('collaboration_bias', 0))}",
+                "종합_평가": member_data.get("overall_evaluation", "")
             })
 
     # 팀원별 코칭 제안 데이터 처리
@@ -265,11 +265,11 @@ def generate_korean_team_evaluation_report(
             
             일반_코칭_리스트.append({
                 "팀원명(사번)": 팀원명_표시,
-                "핵심 강점": item.get("strengths", []),
-                "성장 보완점": item.get("improvement_points", []),
-                "협업 특성": item.get("collaboration_style", ""),
-                "성과 기여 요약": item.get("performance_summary", ""),
-                "다음 분기 코칭 제안": item.get("next_quarter_coaching", "")
+                "핵심_강점": item.get("strengths", []),
+                "성장_보완점": item.get("improvement_points", []),
+                "협업_특성": item.get("collaboration_style", ""),
+                "성과_기여_요약": item.get("performance_summary", ""),
+                "다음_분기_코칭_제안": item.get("next_quarter_coaching", "")
             })
 
     집중_코칭_리스트 = []
@@ -281,10 +281,10 @@ def generate_korean_team_evaluation_report(
             
             집중_코칭_리스트.append({
                 "팀원명(사번)": 팀원명_표시,
-                "핵심 이슈": item.get("issue_summary", ""),
-                "상세 분석": item.get("root_cause_analysis", ""),
-                "리스크 요소": item.get("risk_factors", []),
-                "코칭 제안": item.get("coaching_plan", "")
+                "핵심_이슈": item.get("issue_summary", ""),
+                "상세_분석": item.get("root_cause_analysis", ""),
+                "리스크_요소": item.get("risk_factors", []),
+                "코칭_제안": item.get("coaching_plan", "")
             })
     
     # 리스크 및 향후 운영 제안 데이터 처리
@@ -296,9 +296,9 @@ def generate_korean_team_evaluation_report(
             for impact in risk_item.get("impacts", []):
                 if isinstance(impact, dict):
                     영향_예측_리스트.append({
-                        "영향 범위": impact.get("impact_scope", ""),
-                        "발생 시점": impact.get("timeline", ""),
-                        "영향 설명": impact.get("description", "")
+                        "영향_범위": impact.get("impact_scope", ""),
+                        "발생_시점": impact.get("timeline", ""),
+                        "영향_설명": impact.get("description", "")
                     })
             
             # 운영 개선 전략 상세 처리
@@ -306,16 +306,16 @@ def generate_korean_team_evaluation_report(
             for strategy in risk_item.get("strategies", []):
                 if isinstance(strategy, dict):
                     운영_개선_전략_리스트.append({
-                        "전략 설명": strategy.get("description", "")
+                        "전략_설명": strategy.get("description", "")
                     })
 
             주요_리스크_리스트.append({
                 "주요리스크": risk_item.get("risk_name", ""),
-                "리스크 심각도": risk_item.get("severity", ""),
-                "리스크 설명": risk_item.get("description", ""),
-                "발생 원인": risk_item.get("causes", []),
-                "영향 예측": 영향_예측_리스트,
-                "운영 개선 전략 제안": 운영_개선_전략_리스트
+                "리스크_심각도": risk_item.get("severity", ""),
+                "리스크_설명": risk_item.get("description", ""),
+                "발생_원인": risk_item.get("causes", []),
+                "영향_예측": 영향_예측_리스트,
+                "운영_개선_전략_제안": 운영_개선_전략_리스트
             })
 
 

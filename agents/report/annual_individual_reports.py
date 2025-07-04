@@ -247,7 +247,7 @@ def generate_final_individual_report(
         {
             "Task명": t.task_name or "",
             "핵심_Task": t.task_performance or "",
-            "누적_달성률(%)": safe_convert_to_serializable(t.ai_achievement_rate),
+            "누적_달성률_퍼센트": safe_convert_to_serializable(t.ai_achievement_rate),
             "분석_코멘트": t.ai_analysis_comment_task or ""
         }
         for t in 업무표
