@@ -177,7 +177,7 @@ class UnifiedRAGRetriever:
 
 def search_documents_with_access_control(query: str, user_metadata: dict, filter_type: str = None, top_k: int = 5):
     """RAG 검색기를 사용하는 권한 제어 검색 - 기존 인터페이스 유지"""
-    from llm_utils import ChatbotConfig
+    from .llm_utils import ChatbotConfig
     config = ChatbotConfig()
     rag_retriever = UnifiedRAGRetriever(config)
     
