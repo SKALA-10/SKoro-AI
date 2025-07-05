@@ -7,7 +7,7 @@
 # - 모듈10: 개인 성장 코칭
 # - 모듈11: 팀 운영 리스크 분석
 # - Phase5.1: 연말 개인/팀 리포트 생성
-# - Phase5.2: 개인별 톤 조정
+# - Phase5.2: 개인별/팀별 톤 조정
 # 전제 조건: 모든 팀이 SUBMITTED 상태여야 함
 # =====================================
 # 사용 예시 (터미널 실행 명령어)
@@ -22,7 +22,7 @@
 #   python agents/workflow/annual_phase2_workflow.py --period-id 4 --phase 5
 # Phase5.1만 실행 (연말 리포트 생성):
 #   python agents/workflow/annual_phase2_workflow.py --period-id 4 --phase 5.1
-# Phase5.2만 실행 (개인 톤 조정):
+# Phase5.2만 실행 (개인/팀 톤 조정):
 #   python agents/workflow/annual_phase2_workflow.py --period-id 4 --phase 5.2
 # 특정 모듈만 실행:
 #   python agents/workflow/annual_phase2_workflow.py --period-id 4 --module 8 --teams 1
@@ -214,19 +214,41 @@ def run_phase5_1_generate_reports(period_id: int, teams):
 
 def run_phase5_2_tone_adjustment(period_id: int, teams):
     """
-    Phase5.2: 개인별 톤 조정 및 DB 업데이트
+    Phase5.2: 개인별/팀별 톤 조정 및 DB 업데이트
     """
-    logging.info("Phase5.2: 개인별 톤 조정 시작")
+    logging.info("Phase5.2: 개인별/팀별 톤 조정 시작")
     
+    results = {}
+    
+    # 1. 개인별 톤 조정
     try:
         logging.info("[Phase5.2] 개인별 톤 조정 시작")
         from agents.tone_adjustment.run_individual_tone_adjustment import main as run_individual_tone_adjustment
-        result = run_individual_tone_adjustment(period_id=period_id, teams=teams)
+        individual_result = run_individual_tone_adjustment(period_id=period_id, teams=teams)
+        results['individual'] = individual_result
         logging.info("[Phase5.2] 개인별 톤 조정 완료")
-        return result
     except Exception as e:
         logging.error(f"[Phase5.2] 개인별 톤 조정 실패: {e}")
-        return None
+        results['individual'] = {"status": "error", "message": str(e)}
+    
+    # 2. 팀별 톤 조정 (연말 팀 리포트용)
+    try:
+        logging.info("[Phase5.2] 팀별 톤 조정 시작")
+        from agents.tone_adjustment.run_team_tone_adjustment import run_team_tone_adjustment_for_teams
+        from langchain_openai import ChatOpenAI
+        
+        # LLM 클라이언트 초기화
+        llm_client = ChatOpenAI(model="gpt-4o-mini", temperature=0.1)
+        
+        # 연말 팀 리포트 타입으로 톤 조정
+        team_result = run_team_tone_adjustment_for_teams(period_id, teams, llm_client, "team_final_reports")
+        results['team'] = team_result
+        logging.info("[Phase5.2] 팀별 톤 조정 완료")
+    except Exception as e:
+        logging.error(f"[Phase5.2] 팀별 톤 조정 실패: {e}")
+        results['team'] = {"status": "error", "message": str(e)}
+    
+    return results
 
 def run_phase5_reports(period_id: int, teams):
     """
@@ -288,7 +310,7 @@ def main():
   # Phase5.1만 실행 (연말 리포트 생성)
   python agents/workflow/annual_phase2_workflow.py --period-id 4 --phase 5.1
   
-  # Phase5.2만 실행 (개인 톤 조정)
+  # Phase5.2만 실행 (개인/팀 톤 조정)
   python agents/workflow/annual_phase2_workflow.py --period-id 4 --phase 5.2
   
   # 특정 모듈만 실행
@@ -301,7 +323,7 @@ def main():
     parser.add_argument('--period-id', type=int, required=True, help='연말 기간 ID (예: 4)')
     parser.add_argument('--teams', help='팀 ID (예: 1,2,3 또는 all)', required=False, default=None)
     parser.add_argument('--auto', action='store_true', help='모든 단계 자동 실행')
-    parser.add_argument('--phase', type=str, choices=['5', '5.1', '5.2'], help='특정 Phase만 실행 (5: 전체, 5.1: 리포트 생성, 5.2: 톤 조정)')
+    parser.add_argument('--phase', type=str, choices=['5', '5.1', '5.2'], help='특정 Phase만 실행 (5: 전체, 5.1: 리포트 생성, 5.2: 개인/팀 톤 조정)')
     parser.add_argument('--module', type=int, choices=[8, 9, 10, 11], help='특정 모듈만 실행')
     args = parser.parse_args()
 
