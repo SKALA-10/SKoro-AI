@@ -218,37 +218,56 @@ def run_phase5_2_tone_adjustment(period_id: int, teams):
     """
     logging.info("Phase5.2: 개인별/팀별 톤 조정 시작")
     
-    results = {}
+    completed_teams = []
     
-    # 1. 개인별 톤 조정
-    try:
-        logging.info("[Phase5.2] 개인별 톤 조정 시작")
-        from agents.tone_adjustment.run_individual_tone_adjustment import main as run_individual_tone_adjustment
-        individual_result = run_individual_tone_adjustment(period_id=period_id, teams=teams)
-        results['individual'] = individual_result
-        logging.info("[Phase5.2] 개인별 톤 조정 완료")
-    except Exception as e:
-        logging.error(f"[Phase5.2] 개인별 톤 조정 실패: {e}")
-        results['individual'] = {"status": "error", "message": str(e)}
-    
-    # 2. 팀별 톤 조정 (연말 팀 리포트용)
-    try:
-        logging.info("[Phase5.2] 팀별 톤 조정 시작")
-        from agents.tone_adjustment.run_team_tone_adjustment import run_team_tone_adjustment_for_teams
-        from langchain_openai import ChatOpenAI
+    for team_id in teams:
+        logging.info(f"[Phase5.2] 팀 {team_id} 톤 조정 시작")
         
-        # LLM 클라이언트 초기화
-        llm_client = ChatOpenAI(model="gpt-4o-mini", temperature=0.1)
+        # 1. 개인별 톤 조정
+        individual_success = False
+        try:
+            logging.info(f"[Phase5.2] 팀 {team_id} 개인별 톤 조정 시작")
+            from agents.tone_adjustment.run_individual_tone_adjustment import main as run_individual_tone_adjustment
+            individual_result = run_individual_tone_adjustment(period_id=period_id, teams=[team_id])
+            individual_success = True
+            logging.info(f"[Phase5.2] 팀 {team_id} 개인별 톤 조정 완료")
+        except Exception as e:
+            logging.error(f"[Phase5.2] 팀 {team_id} 개인별 톤 조정 실패: {e}")
+            individual_result = None
         
-        # 연말 팀 리포트 타입으로 톤 조정
-        team_result = run_team_tone_adjustment_for_teams(period_id, teams, llm_client, "team_final_reports")
-        results['team'] = team_result
-        logging.info("[Phase5.2] 팀별 톤 조정 완료")
-    except Exception as e:
-        logging.error(f"[Phase5.2] 팀별 톤 조정 실패: {e}")
-        results['team'] = {"status": "error", "message": str(e)}
+        # 2. 팀별 톤 조정 (연말 팀 리포트용)
+        team_success = False
+        try:
+            logging.info(f"[Phase5.2] 팀 {team_id} 팀별 톤 조정 시작")
+            from agents.tone_adjustment.run_team_tone_adjustment import run_team_tone_adjustment_for_teams
+            from langchain_openai import ChatOpenAI
+            
+            # LLM 클라이언트 초기화
+            llm_client = ChatOpenAI(model="gpt-4o-mini", temperature=0.1)
+            
+            # 연말 팀 리포트 타입으로 톤 조정
+            team_result = run_team_tone_adjustment_for_teams(period_id, [team_id], llm_client, "team_final_reports")
+            team_success = True
+            logging.info(f"[Phase5.2] 팀 {team_id} 팀별 톤 조정 완료")
+        except Exception as e:
+            logging.error(f"[Phase5.2] 팀 {team_id} 팀별 톤 조정 실패: {e}")
+            team_result = None
+        
+        # 3. 둘 다 성공한 팀만 COMPLETED 업데이트
+        if individual_success and team_success:
+            update_team_status(team_id, period_id, "COMPLETED")
+            completed_teams.append(team_id)
+            logging.info(f"[Phase5.2] 팀 {team_id} 최종 완료 상태 업데이트")
+        else:
+            logging.warning(f"[Phase5.2] 팀 {team_id} 톤 조정 실패로 COMPLETED 상태 업데이트 건너뜀")
     
-    return results
+    logging.info(f"Phase5.2: 완료된 팀 {len(completed_teams)}/{len(teams)}")
+    logging.info("Phase5.2: 전체 톤 조정 완료!")
+    return {
+        "completed_teams": completed_teams,
+        "total_teams": len(teams),
+        "success_rate": f"{len(completed_teams)}/{len(teams)}"
+    }
 
 def run_phase5_reports(period_id: int, teams):
     """
@@ -283,12 +302,8 @@ def run_auto_workflow(period_id: int, specific_teams=None):
     # Phase4: 전사 모듈 자동 실행
     run_phase4_all_modules(period_id, teams)
     
-    # Phase5: 연말 리포트 생성
+    # Phase5: 연말 리포트 생성 (톤 조정 완료 시 COMPLETED 업데이트 포함)
     run_phase5_reports(period_id, teams)
-    
-    # 완료 후 상태 업데이트
-    for team_id in teams:
-        update_team_status(team_id, period_id, "COMPLETED")
     
     logging.info("[AUTO] 연말 2단계 평가 자동 실행 완료!")
 
@@ -395,11 +410,9 @@ def main():
 
     run_phase4_all_modules(args.period_id, teams)
     
-    # Phase5: 연말 리포트 생성
+    # Phase5: 연말 리포트 생성 (톤 조정 완료 시 COMPLETED 업데이트 포함)
     run_phase5_reports(args.period_id, teams)
     
-    for team_id in teams:
-        update_team_status(team_id, args.period_id, "COMPLETED")
     logging.info("연말 2단계 평가 워크플로우 완료!")
 
 if __name__ == "__main__":

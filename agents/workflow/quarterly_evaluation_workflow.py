@@ -277,30 +277,49 @@ def run_phase4_2_tone_adjustment(period_id: int, teams):
     """
     logging.info("Phase4.2: 개인별 + 팀별 톤 조정 시작")
     
-    # 1. 개인별 톤 조정
-    try:
-        logging.info("[Phase4.2] 개인별 톤 조정 시작")
-        from agents.tone_adjustment.run_individual_tone_adjustment import main as run_individual_tone_adjustment
-        individual_result = run_individual_tone_adjustment(period_id=period_id, teams=teams)
-        logging.info("[Phase4.2] 개인별 톤 조정 완료")
-    except Exception as e:
-        logging.error(f"[Phase4.2] 개인별 톤 조정 실패: {e}")
-        individual_result = None
+    completed_teams = []
     
-    # 2. 팀별 톤 조정
-    try:
-        logging.info("[Phase4.2] 팀별 톤 조정 시작")
-        import agents.tone_adjustment.run_team_tone_adjustment as team_tone_module
-        team_result = team_tone_module.main(period_id=period_id, teams=teams)
-        logging.info("[Phase4.2] 팀별 톤 조정 완료")
-    except Exception as e:
-        logging.error(f"[Phase4.2] 팀별 톤 조정 실패: {e}")
-        team_result = None
+    for team_id in teams:
+        logging.info(f"[Phase4.2] 팀 {team_id} 톤 조정 시작")
+        
+        # 1. 개인별 톤 조정
+        individual_success = False
+        try:
+            logging.info(f"[Phase4.2] 팀 {team_id} 개인별 톤 조정 시작")
+            from agents.tone_adjustment.run_individual_tone_adjustment import main as run_individual_tone_adjustment
+            individual_result = run_individual_tone_adjustment(period_id=period_id, teams=[team_id])
+            individual_success = True
+            logging.info(f"[Phase4.2] 팀 {team_id} 개인별 톤 조정 완료")
+        except Exception as e:
+            logging.error(f"[Phase4.2] 팀 {team_id} 개인별 톤 조정 실패: {e}")
+            individual_result = None
+        
+        # 2. 팀별 톤 조정
+        team_success = False
+        try:
+            logging.info(f"[Phase4.2] 팀 {team_id} 팀별 톤 조정 시작")
+            import agents.tone_adjustment.run_team_tone_adjustment as team_tone_module
+            team_result = team_tone_module.main(period_id=period_id, teams=[team_id])
+            team_success = True
+            logging.info(f"[Phase4.2] 팀 {team_id} 팀별 톤 조정 완료")
+        except Exception as e:
+            logging.error(f"[Phase4.2] 팀 {team_id} 팀별 톤 조정 실패: {e}")
+            team_result = None
+        
+        # 3. 둘 다 성공한 팀만 COMPLETED 업데이트
+        if individual_success and team_success:
+            update_team_status(team_id, period_id, "COMPLETED")
+            completed_teams.append(team_id)
+            logging.info(f"[Phase4.2] 팀 {team_id} 최종 완료 상태 업데이트")
+        else:
+            logging.warning(f"[Phase4.2] 팀 {team_id} 톤 조정 실패로 COMPLETED 상태 업데이트 건너뜀")
     
+    logging.info(f"Phase4.2: 완료된 팀 {len(completed_teams)}/{len(teams)}")
     logging.info("Phase4.2: 전체 톤 조정 완료!")
     return {
-        "individual_result": individual_result,
-        "team_result": team_result
+        "completed_teams": completed_teams,
+        "total_teams": len(teams),
+        "success_rate": f"{len(completed_teams)}/{len(teams)}"
     }
 
 def run_phase4_reports(period_id: int, teams):
