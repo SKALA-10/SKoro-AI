@@ -31,10 +31,10 @@ TEAM_LEADER_TONE_ADJUSTMENT_FIELDS = {
         "팀원별_평가_근거.AI_점수_산출_기준.업적.실적_요약",  # AI_점수_산출_기준 하위
         "팀원별_평가_근거.AI_점수_산출_기준.평가_근거_요약",  # AI_점수_산출_기준 하위
         "팀원별_평가_근거.연간_핵심_성과_기여도.Task_표.분석_코멘트",  # Task_표 배열 항목 (중간평가)
-    #     "팀원별_평가_근거.연간_핵심_성과_기여도.종합_기여_코멘트",  # 연간_핵심_성과_기여도 하위
-    #     "팀원별_평가_근거.Peer_Talk.강점",                  # Peer_Talk 하위
-    #     "팀원별_평가_근거.Peer_Talk.우려",                  # Peer_Talk 하위
-    #     "팀원별_평가_근거.Peer_Talk.협업_관찰"              # Peer_Talk 하위
+        # "팀원별_평가_근거.연간_핵심_성과_기여도.종합_기여_코멘트",  # 연간_핵심_성과_기여도 하위
+        # "팀원별_평가_근거.Peer_Talk.강점",                  # Peer_Talk 하위
+        # "팀원별_평가_근거.Peer_Talk.우려",                  # Peer_Talk 하위
+        # "팀원별_평가_근거.Peer_Talk.협업_관찰"              # Peer_Talk 하위
     ],
     
     "team_final_reports": [  # 연말 팀 레포트 - 경로 기반 (실제 구조에 맞춰 수정)
@@ -175,6 +175,9 @@ class TeamLeaderToneAdjustmentAgent:
                                 field_id = f"{current_path}"
                                 extracted[field_id] = value
                                 print(f"    ✅ 배열 경로 매칭 추출: {path_for_matching} -> {field_id} ({len(value)}자)")
+                            
+                            # 배열 내부의 중첩된 구조도 재귀 탐색
+                            extract_recursive(value, current_path, key)
                     elif isinstance(item, str) and parent_key in target_field_keys and len(item.strip()) > 20:
                         # 문자열 배열 항목
                         field_id = f"{path}[{idx}]"
@@ -184,7 +187,28 @@ class TeamLeaderToneAdjustmentAgent:
         # 일반적인 재귀 추출
         extract_recursive(report_json)
         
+        # 디버깅: 실제 JSON 구조 출력
+        print(f"    🔍 디버깅: target_field_keys = {target_field_keys}")
+        print(f"    🔍 디버깅: 실제 JSON 키들 = {list(self._get_all_paths(report_json))}")
+        
         return extracted
+    
+    def _get_all_paths(self, data, path="") -> set:
+        """JSON의 모든 경로를 수집하는 헬퍼 함수"""
+        paths = set()
+        
+        if isinstance(data, dict):
+            for key, value in data.items():
+                current_path = f"{path}.{key}" if path else key
+                paths.add(current_path)
+                paths.update(self._get_all_paths(value, current_path))
+        elif isinstance(data, list):
+            for idx, item in enumerate(data):
+                current_path = f"{path}[{idx}]"
+                paths.add(current_path)
+                paths.update(self._get_all_paths(item, current_path))
+        
+        return paths
     
     def adjust_tone_and_length(self, fields_data: Dict[str, str], report_type: str) -> Dict[str, str]:
         """톤 조정 + 길이 조절"""
