@@ -29,6 +29,8 @@
 #   python agents/workflow/quarterly_evaluation_workflow.py --period-id 2 --phase 2 --teams 1
 #   python agents/workflow/quarterly_evaluation_workflow.py --period-id 2 --phase 3 --teams 1
 #   python agents/workflow/quarterly_evaluation_workflow.py --period-id 2 --phase 4 --teams 1
+#   python agents/workflow/quarterly_evaluation_workflow.py --period-id 2 --phase 4.1 --teams 1
+#   python agents/workflow/quarterly_evaluation_workflow.py --period-id 2 --phase 4.2 --teams 1
 # 특정 모듈만 실행:
 #   python agents/workflow/quarterly_evaluation_workflow.py --period-id 2 --module 2 --teams 1
 #   python agents/workflow/quarterly_evaluation_workflow.py --period-id 2 --module 3 --teams 1
@@ -251,23 +253,49 @@ def run_phase3_all_modules(period_id: int, teams):
     asyncio.run(run_module11_for_all_teams())
     logging.info("Phase3: 완료")
 
-def run_phase4_reports(period_id: int, teams):
+def run_phase4_1_generate_reports(period_id: int, teams):
     """
-    Phase4: 개인별 리포트 → 팀별 리포트 순서로 생성
+    Phase4.1: 개인별 리포트 생성 및 DB 저장
     """
-    logging.info("Phase4: 리포트 생성 시작")
+    logging.info("Phase4.1: 개인별 리포트 생성 시작")
     
-    # 1. 개인별 리포트 생성
-    logging.info("[Phase4] 개인별 리포트 생성 시작")
+    # 개인별 리포트 생성 (JSON 반환)
     from agents.report.quarterly_individual_reports import main as generate_individual_reports
-    generate_individual_reports(period_id=period_id, teams=teams)
+    generated_reports = generate_individual_reports(period_id=period_id, teams=teams, return_json=True)
     
-    # 2. 팀별 리포트 생성
-    logging.info("[Phase4] 팀별 리포트 생성 시작")
+    # 팀별 리포트 생성
+    logging.info("[Phase4.1] 팀별 리포트 생성 시작")
     from agents.report.quarterly_team_reports import main as generate_team_reports
     generate_team_reports(period_id=period_id, teams=teams)
     
-    logging.info("Phase4: 리포트 생성 완료!")
+    logging.info("Phase4.1: 리포트 생성 완료!")
+    return generated_reports
+
+def run_phase4_2_tone_adjustment(period_id: int, teams):
+    """
+    Phase4.2: 개인별 톤 조정 및 DB 업데이트
+    """
+    logging.info("Phase4.2: 개인별 톤 조정 시작")
+    
+    from agents.tone_adjustment.run_individual_tone_adjustment import main as run_tone_adjustment
+    result = run_tone_adjustment(period_id=period_id, teams=teams)
+    
+    logging.info("Phase4.2: 톤 조정 완료!")
+    return result
+
+def run_phase4_reports(period_id: int, teams):
+    """
+    Phase4: 개인별 리포트 생성 → 톤 조정 → 팀별 리포트 생성 순서로 실행
+    """
+    logging.info("Phase4: 전체 리포트 프로세스 시작")
+    
+    # 4.1: 개인별 리포트 생성
+    generated_reports = run_phase4_1_generate_reports(period_id, teams)
+    
+    # 4.2: 개인별 톤 조정
+    tone_result = run_phase4_2_tone_adjustment(period_id, teams)
+    
+    logging.info("Phase4: 전체 리포트 프로세스 완료!")
 
 def run_auto_workflow(period_id: int, specific_teams=None):
     """
@@ -312,6 +340,8 @@ def main():
   python agents/workflow/quarterly_evaluation_workflow.py --period-id 2 --phase 2 --teams 1
   python agents/workflow/quarterly_evaluation_workflow.py --period-id 2 --phase 3 --teams 1
   python agents/workflow/quarterly_evaluation_workflow.py --period-id 2 --phase 4 --teams 1
+  python agents/workflow/quarterly_evaluation_workflow.py --period-id 2 --phase 4.1 --teams 1
+  python agents/workflow/quarterly_evaluation_workflow.py --period-id 2 --phase 4.2 --teams 1
   
   # 특정 모듈만 실행
   python agents/workflow/quarterly_evaluation_workflow.py --period-id 2 --module 2 --teams 1
@@ -326,7 +356,7 @@ def main():
     parser.add_argument('--period-id', type=int, required=True, help='분기 ID (예: 2)')
     parser.add_argument('--teams', help='팀 ID (예: 1,2,3 또는 all)', required=False, default=None)
     parser.add_argument('--auto', action='store_true', help='모든 단계 자동 실행')
-    parser.add_argument('--phase', type=int, choices=[1, 2, 3, 4], help='특정 Phase만 실행')
+    parser.add_argument('--phase', type=str, choices=['1', '2', '3', '4', '4.1', '4.2'], help='특정 Phase만 실행')
     parser.add_argument('--module', type=int, choices=[2, 3, 4, 6, 8, 10, 11], help='특정 모듈만 실행')
     parser.add_argument('--phase4-only', action='store_true', help='Phase4(리포트 생성)만 실행 (deprecated, --phase 4 사용)')
     args = parser.parse_args()
@@ -340,7 +370,7 @@ def main():
     # --phase4-only 옵션 (deprecated)
     if args.phase4_only:
         logging.warning("--phase4-only는 deprecated입니다. --phase 4를 사용하세요.")
-        args.phase = 4
+        args.phase = '4'
 
     # --auto 옵션: 전체 자동 실행
     if args.auto:
@@ -356,14 +386,18 @@ def main():
         teams = get_target_teams(args.period_id, team_list)
         logging.info(f"[Phase{args.phase}] {len(teams)}개 팀 실행")
         
-        if args.phase == 1:
+        if args.phase == '1':
             run_phase1_all_teams(teams, args.period_id)
-        elif args.phase == 2:
+        elif args.phase == '2':
             run_phase2_all_teams(teams, args.period_id)
-        elif args.phase == 3:
+        elif args.phase == '3':
             run_phase3_all_modules(args.period_id, teams)
-        elif args.phase == 4:
+        elif args.phase == '4':
             run_phase4_reports(args.period_id, teams)
+        elif args.phase == '4.1':
+            run_phase4_1_generate_reports(args.period_id, teams)
+        elif args.phase == '4.2':
+            run_phase4_2_tone_adjustment(args.period_id, teams)
         
         logging.info(f"[Phase{args.phase}] 완료!")
         sys.exit(0)

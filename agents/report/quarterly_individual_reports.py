@@ -454,7 +454,7 @@ def validate_korean_feedback_report(report: dict) -> bool:
     print(f"   - ✅ 개인 리포트 검증 성공!")
     return True
 
-def main(emp_no: Optional[str] = None, period_id: Optional[int] = None, teams: Optional[list] = None):
+def main(emp_no: Optional[str] = None, period_id: Optional[int] = None, teams: Optional[list] = None, return_json: bool = False):
     """
     메인 실행 함수: 개인 평가 리포트를 한국어 JSON으로 생성하고 DB에 저장합니다.
     
@@ -462,6 +462,7 @@ def main(emp_no: Optional[str] = None, period_id: Optional[int] = None, teams: O
         emp_no: 특정 직원 번호. None이면 모든 직원을 처리합니다.
         period_id: 특정 분기 ID. None이면 모든 분기를 처리합니다.
         teams: 특정 팀들의 직원 번호 리스트. None이면 모든 직원을 처리합니다.
+        return_json: True이면 생성된 JSON을 반환합니다. False이면 기존 동작과 동일합니다.
     """
     try:
         engine = get_db_engine()
@@ -480,6 +481,8 @@ def main(emp_no: Optional[str] = None, period_id: Optional[int] = None, teams: O
                 return
 
             success_count, error_count = 0, 0
+            generated_reports = {}  # JSON 반환용
+            
             for current_emp_no in all_emp_nos:
                 print(f"\n{'='*50}\n🚀 개인 평가 리포트 생성 시작 ({current_emp_no})\n{'='*50}")
                 try:
@@ -502,6 +505,10 @@ def main(emp_no: Optional[str] = None, period_id: Optional[int] = None, teams: O
                         continue
 
                     save_feedback_json_report_to_db(engine, current_emp_no, 한국어리포트, period_id)
+                    
+                    if return_json:
+                        generated_reports[current_emp_no] = 한국어리포트
+                    
                     success_count += 1
 
                 except Exception as e:
@@ -516,6 +523,9 @@ def main(emp_no: Optional[str] = None, period_id: Optional[int] = None, teams: O
             print(f"✅ 성공: {success_count}개")
             print(f"❌ 실패: {error_count}개")
             print(f"📊 총 처리: {len(all_emp_nos)}개")
+            
+            if return_json:
+                return generated_reports
             
         else:
             # 특정 직원만 처리
@@ -542,13 +552,17 @@ def main(emp_no: Optional[str] = None, period_id: Optional[int] = None, teams: O
                     return
 
                 save_feedback_json_report_to_db(engine, emp_no, 한국어리포트, period_id)
-                print(f"\n✅ {emp_no}님 처리 완료!")
+                
+                if return_json:
+                    return {emp_no: 한국어리포트}
+                else:
+                    print(f"\n✅ {emp_no}님 처리 완료!")
                 
             except Exception as e:
                 print(f"❌ {emp_no}님 처리 중 오류 발생: {e}")
                 import traceback
                 traceback.print_exc()
-                return
+                return None
                 
     except ValueError as e:
         print(f"설정 오류: {e}")
