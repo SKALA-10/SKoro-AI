@@ -1,140 +1,189 @@
 # =============================================================================
-# main_chatbot.py - SKChatbot 클래스 정의
+# main_chatbot.py - 메인 실행 함수
 # =============================================================================
 
-"""
-SKChatbot 메인 클래스 - 외부에서 호출하는 인터페이스
-"""
+import os
+from datetime import datetime
+from .agent import SKChatbot, session_manager
 
-from typing import Dict, List
-from .sk_chatbot import create_chatbot_workflow, session_manager
+# =============================================================================
+# 7. 대화형 테스트 인터페이스
+# =============================================================================
 
-class SKChatbot:
-    """SK 성과평가 챗봇 - LangGraph 기반"""
-    
+class InteractiveChatbotTest:
     def __init__(self):
-        print("🤖 SKChatbot 초기화 중...")
-        try:
-            self.workflow = create_chatbot_workflow()
-            print("✅ LangGraph 워크플로우 로드 완료!")
-        except Exception as e:
-            print(f"❌ 워크플로우 초기화 실패: {str(e)}")
-            raise
+        self.chatbot = SKChatbot()
+        self.current_user = None
+        self.current_mode = "default"
+        self.session_active = False
+        
+    def clear_screen(self):
+        os.system('cls' if os.name == 'nt' else 'clear')
     
-    def chat(self, 
-             user_id: str, 
-             chat_mode: str, 
-             user_input: str, 
-             appeal_complete: bool = False) -> Dict:
-        """
-        챗봇과 대화
+    def print_header(self):
+        print("🤖 " + "="*60)
+        print("   SK 성과평가 AI 챗봇 - 대화형 테스트")
+        print("="*63)
+        print(f"👤 현재 사용자: {self.current_user}")
+        print(f"🔧 현재 모드: {self.current_mode}")
+        print(f"📅 시간: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+        print("="*63)
         
-        Args:
-            user_id: 사용자 ID (emp_no)
-            chat_mode: "default" 또는 "appeal_to_manager"
-            user_input: 사용자 입력
-            appeal_complete: 이의제기 완료 플래그
+    def show_commands(self):
+        print("\\n📋 사용 가능한 명령어:")
+        print("  /user <사번>     - 사용자 변경 (예: /user sk0002)")
+        print("  /mode default    - QnA 모드로 변경")
+        print("  /mode appeal     - 이의제기 모드로 변경")
+        print("  /history         - 대화 히스토리 보기")
+        print("  /clear           - 현재 세션 클리어")
+        print("  /summary         - 이의제기 요약 (appeal 모드에서만)")
+        print("  /help            - 도움말")
+        print("  /quit            - 종료")
+        print("-" * 63)
+    
+    def handle_command(self, command: str) -> bool:
+        command = command.strip()
         
-        Returns:
-            응답 딕셔너리
-        """
-        
-        print(f"📝 처리 중: {user_id} | {chat_mode} | {user_input[:30]}...")
-        
-        try:
-            # 1. 세션에서 기존 상태 로드
-            saved_state = session_manager.get_session_state(user_id, chat_mode)
-            
-            # 2. 현재 요청으로 상태 구성
-            current_state = {
-                "user_id": user_id,
-                "chat_mode": chat_mode,
-                "user_input": user_input,
-                "appeal_complete": appeal_complete,
-                # 기존 대화 히스토리 로드
-                "qna_dialog_log": saved_state.get("qna_dialog_log", []),
-                "dialog_log": saved_state.get("dialog_log", []),
-            }
-            
-            # 3. LangGraph 워크플로우 실행
-            result_state = self.workflow.invoke(current_state)
-            
-            # 4. 세션에 결과 저장
-            session_manager.save_session_state(user_id, chat_mode, result_state)
-            
-            # 5. 응답 형식 결정
-            if chat_mode == "appeal_to_manager" and appeal_complete:
-                return {
-                    "type": "appeal_summary",
-                    "summary": result_state["summary_draft"],
-                    "user_id": user_id
-                }
-            elif chat_mode == "appeal_to_manager":
-                return {
-                    "type": "appeal_dialogue",
-                    "response": result_state["llm_response"],
-                    "user_id": user_id
-                }
+        if command == "/quit":
+            return False
+        elif command == "/help":
+            self.show_commands()
+        elif command.startswith("/user "):
+            new_user = command[6:].strip()
+            if new_user:
+                self.current_user = new_user
+                print(f"✅ 사용자를 '{new_user}'로 변경했습니다.")
             else:
-                return {
-                    "type": "qna_response",
-                    "response": result_state["llm_response"],
-                    "user_id": user_id
-                }
-                
-        except Exception as e:
-            print(f"❌ 챗봇 처리 중 오류: {str(e)}")
-            return {
-                "type": "error",
-                "message": f"처리 중 오류가 발생했습니다: {str(e)}",
-                "user_id": user_id
-            }
-    
-    def get_session_history(self, user_id: str, chat_mode: str) -> List[str]:
-        """세션 히스토리 조회"""
-        try:
-            saved_state = session_manager.get_session_state(user_id, chat_mode)
-            if chat_mode == "appeal_to_manager":
-                return saved_state.get("dialog_log", [])
+                print("❌ 사용자 ID를 입력해주세요. (예: /user sk0002)")
+        elif command == "/mode default":
+            self.current_mode = "default"
+            print("✅ QnA 모드로 변경했습니다.")
+        elif command == "/mode appeal":
+            self.current_mode = "appeal_to_manager"
+            print("✅ 이의제기 모드로 변경했습니다.")
+        elif command == "/history":
+            self.show_history()
+        elif command == "/clear":
+            self.clear_session()
+        elif command == "/summary":
+            if self.current_mode == "appeal_to_manager":
+                self.generate_summary()
             else:
-                return saved_state.get("qna_dialog_log", [])
-        except Exception as e:
-            print(f"❌ 히스토리 조회 실패: {str(e)}")
-            return []
-    
-    def clear_session(self, user_id: str, chat_mode: str):
-        """특정 세션 클리어"""
-        try:
-            session_manager.clear_session(user_id, chat_mode)
-            print(f"✅ {user_id}의 {chat_mode} 세션 클리어 완료")
-        except Exception as e:
-            print(f"❌ 세션 클리어 실패: {str(e)}")
-
-# 테스트용 함수
-def test_skChatbot():
-    """SKChatbot 테스트"""
-    print("🧪 SKChatbot 테스트 시작...")
-    
-    try:
-        # 인스턴스 생성
-        chatbot = SKChatbot()
+                print("❌ 요약은 이의제기 모드에서만 가능합니다.")
+        else:
+            print(f"❌ 알 수 없는 명령어: {command}")
         
-        # 간단한 채팅 테스트
-        response = chatbot.chat(
-            user_id="test_user",
-            chat_mode="default",
-            user_input="테스트 메시지입니다"
-        )
-        
-        print(f"✅ 테스트 성공! 응답: {response}")
         return True
+    
+    def show_history(self):
+        if not self.current_user:
+            print("❌ 먼저 사용자를 설정해주세요.")
+            return
         
-    except Exception as e:
-        print(f"❌ 테스트 실패: {str(e)}")
-        import traceback
-        traceback.print_exc()
-        return False
+        history = self.chatbot.get_session_history(self.current_user, self.current_mode)
+        
+        if not history:
+            print("📝 대화 히스토리가 없습니다.")
+            return
+        
+        print(f"\\n📜 대화 히스토리 ({len(history)}개):")
+        print("-" * 50)
+        for i, msg in enumerate(history, 1):
+            print(f"{i:2d}. {msg}")
+        print("-" * 50)
+    
+    def clear_session(self):
+        if not self.current_user:
+            print("❌ 먼저 사용자를 설정해주세요.")
+            return
+        
+        self.chatbot.clear_session(self.current_user, self.current_mode)
+        print("✅ 현재 세션이 클리어되었습니다.")
+    
+    def generate_summary(self):
+        if not self.current_user:
+            print("❌ 먼저 사용자를 설정해주세요.")
+            return
+        
+        print("🔄 이의제기 요약을 생성하고 있습니다...")
+        
+        try:
+            response = self.chatbot.chat(
+                user_id=self.current_user,
+                chat_mode=self.current_mode,
+                user_input="요약해주세요",
+                appeal_complete=True
+            )
+            
+            if response["type"] == "appeal_summary":
+                print(f"\\n📋 이의제기 요약:")
+                print("=" * 50)
+                print(response["summary"])
+                print("=" * 50)
+            else:
+                print("❌ 요약 생성에 실패했습니다.")
+        except Exception as e:
+            print(f"❌ 요약 생성 중 오류 발생: {str(e)}")
+    
+    def chat_with_bot(self, user_input: str):
+        if not self.current_user:
+            print("❌ 먼저 사용자를 설정해주세요.")
+            return
+        
+        print("🤖 답변을 생성하고 있습니다...")
+        
+        try:
+            response = self.chatbot.chat(
+                user_id=self.current_user,
+                chat_mode=self.current_mode,
+                user_input=user_input
+            )
+            
+            print(f"\\n🤖 챗봇:")
+            print("-" * 50)
+            print(response["response"])
+            print("-" * 50)
+            
+        except Exception as e:
+            print(f"❌ 오류 발생: {str(e)}")
+    
+    def run(self):
+        self.clear_screen()
+        self.print_header()
+        
+        print("🎉 SK 성과평가 AI 챗봇에 오신 것을 환영합니다!")
+        print("💡 시작하려면 먼저 사용자를 설정해주세요. (예: /user sk0002)")
+        self.show_commands()
+        
+        while True:
+            try:
+                user_input = input(f"\\n💬 입력하세요: ").strip()
+                
+                if not user_input:
+                    continue
+                
+                if user_input.startswith("/"):
+                    if not self.handle_command(user_input):
+                        break
+                else:
+                    self.chat_with_bot(user_input)
+                    
+            except KeyboardInterrupt:
+                print("\\n\\n👋 챗봇을 종료합니다.")
+                break
+            except Exception as e:
+                print(f"\\n❌ 예상치 못한 오류: {str(e)}")
+                continue
+        
+        print("🔚 대화가 종료되었습니다. 감사합니다!")
+
+# =============================================================================
+# 8. 실행 함수
+# =============================================================================
+
+def start_interactive_test():
+    test = InteractiveChatbotTest()
+    test.run()
 
 if __name__ == "__main__":
-    # 파일을 직접 실행할 때 테스트
-    test_skChatbot()
+    start_interactive_test()
