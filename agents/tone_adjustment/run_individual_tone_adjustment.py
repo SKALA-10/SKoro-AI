@@ -17,17 +17,17 @@ def get_db_engine() -> Engine:
     return engine
 
 def fetch_team_emp_nos(engine: Engine, teams: list, period_id: int) -> list:
-    """특정 팀들의 직원 번호를 조회합니다. (팀장 제외)"""
+    """특정 팀들의 직원 번호를 조회합니다. (팀장 제외) - 연말 리포트용"""
     placeholders = ','.join([':team_id_' + str(i) for i in range(len(teams))])
     query = text(f"""
         SELECT DISTINCT e.emp_no 
         FROM employees e
-        JOIN feedback_reports fr ON e.emp_no = fr.emp_no
-        JOIN team_evaluations te ON fr.team_evaluation_id = te.team_evaluation_id
+        JOIN final_evaluation_reports fer ON e.emp_no = fer.emp_no
+        JOIN team_evaluations te ON fer.team_evaluation_id = te.team_evaluation_id
         WHERE e.team_id IN ({placeholders}) 
         AND e.role != 'MANAGER'  # 팀장 제외
         AND te.period_id = :period_id
-        AND fr.report IS NOT NULL  # 리포트가 있는 직원만
+        AND fer.report IS NOT NULL  # 리포트가 있는 직원만
         ORDER BY e.emp_no;
     """)
     params = {f'team_id_{i}': team_id for i, team_id in enumerate(teams)}
@@ -40,14 +40,14 @@ def fetch_team_emp_nos(engine: Engine, teams: list, period_id: int) -> list:
     return emp_nos
 
 def load_report_from_db(engine: Engine, emp_no: str, period_id: int) -> Optional[Dict[str, Any]]:
-    """DB에서 직원의 리포트 JSON을 로드합니다."""
+    """DB에서 직원의 리포트 JSON을 로드합니다. - 연말 리포트용"""
     try:
         query = text("""
-            SELECT fr.report
-            FROM feedback_reports fr
-            JOIN team_evaluations te ON fr.team_evaluation_id = te.team_evaluation_id
-            WHERE fr.emp_no = :emp_no AND te.period_id = :period_id
-            AND fr.report IS NOT NULL
+            SELECT fer.report
+            FROM final_evaluation_reports fer
+            JOIN team_evaluations te ON fer.team_evaluation_id = te.team_evaluation_id
+            WHERE fer.emp_no = :emp_no AND te.period_id = :period_id
+            AND fer.report IS NOT NULL
         """)
         
         with engine.connect() as connection:
@@ -64,12 +64,12 @@ def load_report_from_db(engine: Engine, emp_no: str, period_id: int) -> Optional
         return None
 
 def save_adjusted_report_to_db(engine: Engine, emp_no: str, adjusted_report: Dict[str, Any], period_id: int) -> bool:
-    """조정된 리포트를 DB에 저장합니다."""
+    """조정된 리포트를 DB에 저장합니다. - 연말 리포트용"""
     try:
         json_content = json.dumps(adjusted_report, ensure_ascii=False, indent=2)
         
         query = text("""
-            UPDATE feedback_reports 
+            UPDATE final_evaluation_reports 
             SET report = :report_content 
             WHERE emp_no = :emp_no 
             AND team_evaluation_id IN (
@@ -114,8 +114,8 @@ def run_tone_adjustment_for_emp(emp_no: str, period_id: int, teams: list, llm_cl
     try:
         agent = IndividualToneAdjustmentAgent(llm_client)
         
-        # feedback_reports 타입으로 톤 조정
-        adjusted_report = agent.process_report(original_report, "feedback_reports")
+        # final_evaluation_reports 타입으로 톤 조정
+        adjusted_report = agent.process_report(original_report, "final_evaluation_reports")
         
         # 3. DB에 저장
         save_success = save_adjusted_report_to_db(engine, emp_no, adjusted_report, period_id)
