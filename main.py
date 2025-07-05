@@ -1,6 +1,8 @@
-from fastapi import FastAPI, APIRouter
+from fastapi import FastAPI, APIRouter, Depends
 from fastapi.middleware.cors import CORSMiddleware
+from auth.auth import admin_required
 from routers import evaluation_router, chat_router, kpi_generator_router, chatbot_summary_router
+from auth.auth import verify_token
 
 app = FastAPI(
     title="SKoro-AI API",
@@ -23,17 +25,22 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# 라우터
-api_router = APIRouter()
+# 🔐 ADMIN 권한 필요 API
+secured_router = APIRouter(
+    dependencies=[Depends(admin_required)]
+)
+secured_router.include_router(evaluation_router.router, prefix="/evaluation")
+secured_router.include_router(kpi_generator_router.router, prefix="/kpi")
+secured_router.include_router(chatbot_summary_router.router, prefix="/chatbot-summary")
 
-api_router.include_router(evaluation_router.router, prefix="/evaluation")
-api_router.include_router(chatbot_summary_router.router, prefix="/chatbot-summary")
-api_router.include_router(chat_router.router, prefix="/chat")
-api_router.include_router(kpi_generator_router.router, prefix="/kpi")
+# 🔓 누구나 접근 가능한 chat API
+public_router = APIRouter()
+public_router.include_router(chat_router.router, prefix="/chat")
 
-app.include_router(api_router, prefix="/api/ai")
+# FastAPI 등록
+app.include_router(secured_router, prefix="/api/ai")
+app.include_router(public_router, prefix="/api/ai")
 
-# 헬스체크
 @app.get("/health-check")
-def root():
+def health_check():
     return {"message": "SKoro-AI FastAPI is running!"}
