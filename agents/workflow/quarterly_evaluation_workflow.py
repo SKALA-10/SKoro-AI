@@ -273,15 +273,35 @@ def run_phase4_1_generate_reports(period_id: int, teams):
 
 def run_phase4_2_tone_adjustment(period_id: int, teams):
     """
-    Phase4.2: 개인별 톤 조정 및 DB 업데이트
+    Phase4.2: 개인별 톤 조정 + 팀별 톤 조정 및 DB 업데이트
     """
-    logging.info("Phase4.2: 개인별 톤 조정 시작")
+    logging.info("Phase4.2: 개인별 + 팀별 톤 조정 시작")
     
-    from agents.tone_adjustment.run_individual_tone_adjustment import main as run_tone_adjustment
-    result = run_tone_adjustment(period_id=period_id, teams=teams)
+    # 1. 개인별 톤 조정
+    try:
+        logging.info("[Phase4.2] 개인별 톤 조정 시작")
+        from agents.tone_adjustment.run_individual_tone_adjustment import main as run_individual_tone_adjustment
+        individual_result = run_individual_tone_adjustment(period_id=period_id, teams=teams)
+        logging.info("[Phase4.2] 개인별 톤 조정 완료")
+    except Exception as e:
+        logging.error(f"[Phase4.2] 개인별 톤 조정 실패: {e}")
+        individual_result = None
     
-    logging.info("Phase4.2: 톤 조정 완료!")
-    return result
+    # 2. 팀별 톤 조정
+    try:
+        logging.info("[Phase4.2] 팀별 톤 조정 시작")
+        import agents.tone_adjustment.run_team_tone_adjustment as team_tone_module
+        team_result = team_tone_module.main(period_id=period_id, teams=teams)
+        logging.info("[Phase4.2] 팀별 톤 조정 완료")
+    except Exception as e:
+        logging.error(f"[Phase4.2] 팀별 톤 조정 실패: {e}")
+        team_result = None
+    
+    logging.info("Phase4.2: 전체 톤 조정 완료!")
+    return {
+        "individual_result": individual_result,
+        "team_result": team_result
+    }
 
 def run_phase4_reports(period_id: int, teams):
     """

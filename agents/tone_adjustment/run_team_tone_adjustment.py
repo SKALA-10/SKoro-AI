@@ -1,3 +1,184 @@
+import json
+import re
+import logging
+from typing import Dict, Any, List, Optional
+from langchain_openai import ChatOpenAI
+from langchain.schema import HumanMessage, SystemMessage
+from sqlalchemy import create_engine, text
+from sqlalchemy.engine.base import Engine
+
+from config.settings import DatabaseConfig
+from agents.tone_adjustment.team_tone_adjustment import TeamLeaderToneAdjustmentAgent
+
+logging.basicConfig(level=logging.INFO, format='[%(asctime)s] %(levelname)s: %(message)s')
+
+# ================================================================
+# 메인 실행 함수
+# ================================================================
+
+def get_db_engine() -> Engine:
+    """데이터베이스 엔진 생성"""
+    db_config = DatabaseConfig()
+    engine = create_engine(db_config.DATABASE_URL, pool_pre_ping=True)
+    return engine
+
+def fetch_team_reports(engine: Engine, teams: list, period_id: int) -> list:
+    """특정 팀들의 팀 리포트를 조회합니다."""
+    placeholders = ','.join([':team_id_' + str(i) for i in range(len(teams))])
+    query = text(f"""
+        SELECT DISTINCT te.team_id, te.report
+        FROM team_evaluations te
+        WHERE te.team_id IN ({placeholders}) 
+        AND te.period_id = :period_id
+        AND te.report IS NOT NULL  # 리포트가 있는 팀만
+        ORDER BY te.team_id;
+    """)
+    params = {f'team_id_{i}': team_id for i, team_id in enumerate(teams)}
+    params['period_id'] = period_id
+    
+    with engine.connect() as connection:
+        results = connection.execute(query, params).fetchall()
+    
+    team_reports = []
+    for row in results:
+        team_id, report_json = row
+        if report_json:
+            try:
+                report_data = json.loads(report_json)
+                team_reports.append({
+                    'team_id': team_id,
+                    'report': report_data
+                })
+            except json.JSONDecodeError as e:
+                logging.error(f"❌ 팀 {team_id} 리포트 JSON 파싱 실패: {e}")
+    
+    logging.info(f"✅ 팀 {teams}의 팀 리포트 {len(team_reports)}개를 처리합니다.")
+    return team_reports
+
+def save_adjusted_team_report_to_db(engine: Engine, team_id: int, adjusted_report: Dict[str, Any], period_id: int) -> bool:
+    """조정된 팀 리포트를 DB에 저장합니다."""
+    try:
+        json_content = json.dumps(adjusted_report, ensure_ascii=False, indent=2)
+        
+        query = text("""
+            UPDATE team_evaluations 
+            SET report = :report_content 
+            WHERE team_id = :team_id 
+            AND period_id = :period_id
+        """)
+        
+        with engine.connect() as connection:
+            with connection.begin() as transaction:
+                result = connection.execute(query, {
+                    "report_content": json_content, 
+                    "team_id": team_id, 
+                    "period_id": period_id
+                })
+                if result.rowcount > 0:
+                    transaction.commit()
+                    logging.info(f"✅ 팀 {team_id}의 조정된 리포트가 DB에 저장되었습니다.")
+                    return True
+                else:
+                    transaction.rollback()
+                    logging.warning(f"⚠️ 팀 {team_id}에 해당하는 레코드를 찾을 수 없습니다.")
+                    return False
+                    
+    except Exception as e:
+        logging.error(f"❌ 팀 {team_id} 리포트 저장 중 오류: {e}")
+        return False
+
+def run_team_tone_adjustment_for_team(team_id: int, team_report: Dict[str, Any], period_id: int, llm_client: ChatOpenAI) -> Dict[str, Any]:
+    """특정 팀의 톤 조정을 실행합니다."""
+    logging.info(f"🎨 팀 {team_id} 톤 조정 시작")
+    
+    try:
+        agent = TeamLeaderToneAdjustmentAgent(llm_client)
+        
+        # 팀 리포트 타입 결정 (분기별 평가는 team_feedback_reports)
+        report_type = "team_feedback_reports"
+        
+        # 톤 조정 실행
+        adjusted_report = agent.process_report(team_report, report_type)
+        
+        # DB에 저장
+        engine = get_db_engine()
+        save_success = save_adjusted_team_report_to_db(engine, team_id, adjusted_report, period_id)
+        
+        if save_success:
+            return {
+                "team_id": team_id, 
+                "status": "success", 
+                "original_length": len(json.dumps(team_report, ensure_ascii=False)),
+                "adjusted_length": len(json.dumps(adjusted_report, ensure_ascii=False))
+            }
+        else:
+            return {"team_id": team_id, "status": "error", "message": "DB 저장 실패"}
+            
+    except Exception as e:
+        logging.error(f"❌ 팀 {team_id} 톤 조정 중 오류: {e}")
+        return {"team_id": team_id, "status": "error", "message": str(e)}
+
+def run_team_tone_adjustment_for_teams(period_id: int, teams: list, llm_client: ChatOpenAI) -> Dict[str, Any]:
+    """팀별 톤 조정을 실행합니다."""
+    logging.info(f"🎨 Phase 4.2: 팀별 톤 조정 시작 - 팀 {teams}, 분기 {period_id}")
+    
+    engine = get_db_engine()
+    
+    # 대상 팀 리포트 목록 조회
+    team_reports = fetch_team_reports(engine, teams, period_id)
+    if not team_reports:
+        logging.warning("처리할 팀 리포트가 없습니다.")
+        return {"status": "no_team_reports", "results": []}
+    
+    # 팀별 순차 처리
+    results = []
+    success_count = 0
+    error_count = 0
+    
+    for idx, team_data in enumerate(team_reports, 1):
+        team_id = team_data['team_id']
+        team_report = team_data['report']
+        
+        logging.info(f"[{idx}/{len(team_reports)}] 팀 {team_id} 처리 중...")
+        
+        result = run_team_tone_adjustment_for_team(team_id, team_report, period_id, llm_client)
+        results.append(result)
+        
+        if result["status"] == "success":
+            success_count += 1
+        else:
+            error_count += 1
+    
+    logging.info(f"🎉 Phase 4.2: 팀별 톤 조정 완료!")
+    logging.info(f"✅ 성공: {success_count}개")
+    logging.info(f"❌ 실패: {error_count}개")
+    logging.info(f"📊 총 처리: {len(team_reports)}개")
+    
+    return {
+        "status": "completed",
+        "total": len(team_reports),
+        "success": success_count,
+        "error": error_count,
+        "results": results
+    }
+
+def main(period_id: int, teams: list):
+    """메인 실행 함수"""
+    try:
+        # LLM 클라이언트 초기화
+        llm_client = ChatOpenAI(
+            model="gpt-4o-mini",
+            temperature=0.1
+        )
+        
+        # 팀별 톤 조정 실행
+        result = run_team_tone_adjustment_for_teams(period_id, teams, llm_client)
+        
+        return result
+        
+    except Exception as e:
+        logging.error(f"❌ 팀별 톤 조정 실행 중 오류: {e}")
+        return {"status": "error", "message": str(e)}
 
 # ================================================================
 # 테스트 실행 함수
@@ -784,4 +965,16 @@ def test_team_leader_tone_agent():
     print(result)
 
 if __name__ == "__main__":
+    import argparse
+    
+    parser = argparse.ArgumentParser(description="팀별 톤 조정 실행")
+    parser.add_argument('--period-id', type=int, required=True, help='분기 ID')
+    parser.add_argument('--teams', nargs='+', type=int, required=True, help='팀 ID 목록')
+    
+    args = parser.parse_args()
+    
+    # 메인 함수 실행
+    result = main(args.period_id, args.teams)
+    print(f"팀별 톤 조정 결과: {result}")
+else:
     test_team_leader_tone_agent()
