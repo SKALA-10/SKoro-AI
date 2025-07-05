@@ -217,17 +217,17 @@ def generate_team_evaluation_report(data: dict) -> dict:
     기본정보 = {
         "팀명": team_info.team_name or "",
         "팀장명": team_info.manager_name or "미지정",
-        "업무 수행 기간": team_info.period_name or "",
-        "평가 구분": "연간 최종 평가 (Period 4)"
+        "업무_수행_기간": team_info.period_name or "",
+        "평가_구분": "연간 최종 평가 (Period 4)"
     }
     
     # --- 2. 팀 종합 평가 ---
     overall_comp = team_comparison.get("overall", {})
     팀종합평가 = {
-        "평균 달성률": safe_convert_to_serializable(team_info.average_achievement_rate),
-        "유사팀 평균": safe_convert_to_serializable(overall_comp.get("similar_avg_rate", 0)),
-        "비교 분석": overall_comp.get("comparison_result", ""),
-        "팀 성과 분석 코멘트": team_info.ai_team_overall_analysis_comment or ""
+        "평균_달성률": safe_convert_to_serializable(team_info.average_achievement_rate),
+        "유사팀_평균": safe_convert_to_serializable(overall_comp.get("similar_avg_rate", 0)),
+        "비교_분석": overall_comp.get("comparison_result", ""),
+        "팀_성과_분석_코멘트": team_info.ai_team_overall_analysis_comment or ""
     }
     
     # --- 3. 팀 업무 목표 및 달성률 ---
@@ -240,16 +240,16 @@ def generate_team_evaluation_report(data: dict) -> dict:
         )
         
         업무목표표.append({
-            "팀 업무 목표": kpi.kpi_name or "",
-            "kpi 분석 코멘트": kpi.ai_kpi_analysis_comment or "",
+            "팀_업무_목표": kpi.kpi_name or "",
+            "kpi_분석_코멘트": kpi.ai_kpi_analysis_comment or "",
             "달성률": safe_convert_to_serializable(kpi.ai_kpi_progress_rate),
-            "달성률 평균 (전사 유사팀)": safe_convert_to_serializable(matched_kpi_comp_item.get("similar_avg_rate", None)),
-            "비교 분석": str(matched_kpi_comp_item.get("comparison_result", ""))
+            "달성률_평균_전사유사팀": safe_convert_to_serializable(matched_kpi_comp_item.get("similar_avg_rate", None)),
+            "비교_분석": str(matched_kpi_comp_item.get("comparison_result", ""))
         })
     
     팀업무목표및달성률 = {
         "업무목표표": 업무목표표,
-        "전사 유사팀 비교분석 코멘트": overall_comp.get("comment", "")
+        "전사_유사팀_비교분석_코멘트": overall_comp.get("comment", "")
     }
 
     # --- 4. 팀 성과 요약 ---
@@ -264,15 +264,15 @@ def generate_team_evaluation_report(data: dict) -> dict:
             "순위": s.ranking or "N/A",
             "이름": s.emp_name or "",
             "업적": safe_convert_to_serializable(raw_score_data.get("achievement_score", "N/A")),
-            "SK Values (4P)": {
+            "SK_Values_4P": {
                 "Passionate": safe_convert_to_serializable(raw_score_data.get("passionate_score", "N/A")),
                 "Proactive": safe_convert_to_serializable(raw_score_data.get("proactive_score", "N/A")),
                 "Professional": safe_convert_to_serializable(raw_score_data.get("professional_score", "N/A")),
                 "People": safe_convert_to_serializable(raw_score_data.get("people_score", "N/A"))
             },
-            "최종 점수": safe_convert_to_serializable(s.final_score),
+            "최종_점수": safe_convert_to_serializable(s.final_score),
             "기여도": safe_convert_to_serializable(s.contribution_rate),
-            "성과요약": s.ai_annual_performance_summary_comment or "성과 요약이 없습니다."
+            "성과_요약": s.ai_annual_performance_summary_comment or "성과 요약이 없습니다."
         })
     
     팀성과요약 = {
@@ -307,15 +307,15 @@ def generate_team_evaluation_report(data: dict) -> dict:
             
             major_risks_formatted.append({
                 "주요리스크": risk.get("risk_name", ""),
-                "리스크 심각도": risk.get("severity", ""),
-                "리스크 설명": risk.get("description", ""),
-                "발생 원인": risk.get("causes", []),
-                "영향 예측": impact_details,
-                "운영 개선 전략 제안": strategy_details
+                "리스크_심각도": risk.get("severity", ""),
+                "리스크_설명": risk.get("description", ""),
+                "발생_원인": risk.get("causes", []),
+                "영향_예측": impact_details,
+                "운영_개선_전략_제안": strategy_details
             })
     
     팀조직력및리스크요인 = {
-        "주요 리스크 목록": major_risks_formatted
+        "주요_리스크_목록": major_risks_formatted
     }
 
     # --- 6. 다음 연도 운영 제안 ---
@@ -328,46 +328,46 @@ def generate_team_evaluation_report(data: dict) -> dict:
             if isinstance(strategy, dict):
                 personnel_strategies.append({
                     "대상": strategy.get("target", ""),
-                    "실행 방안": strategy.get("action", "")
+                    "실행_방안": strategy.get("action", "")
                 })
             elif isinstance(strategy, str):
-                personnel_strategies.append({"실행 방안": strategy})
+                personnel_strategies.append({"실행_방안": strategy})
         
         collaboration_improvements = []
         for improvement in plan.get("collaboration_improvements", []):
             if isinstance(improvement, dict):
                 collaboration_improvements.append({
-                    "현재 문제점": improvement.get("current_issue", ""),
-                    "개선 방안": improvement.get("improvement", ""),
+                    "현재_문제점": improvement.get("current_issue", ""),
+                    "개선_방안": improvement.get("improvement", ""),
                     "기대효과": improvement.get("expected_benefit", ""),
-                    "목표 지표": improvement.get("target", "")
+                    "목표_지표": improvement.get("target", "")
                 })
             elif isinstance(improvement, str):
-                collaboration_improvements.append({"개선 방안": improvement})
+                collaboration_improvements.append({"개선_방안": improvement})
         
         다음연도운영제안 = {
-            "핵심 인력 운용 전략": personnel_strategies,
-            "협업 구조 개선 방향": collaboration_improvements
+            "핵심_인력_운용_전략": personnel_strategies,
+            "협업_구조_개선_방향": collaboration_improvements
         }
     else:
         다음연도운영제안 = {
-            "핵심 인력 운용 전략": [],
-            "협업 구조 개선 방향": []
+            "핵심_인력_운용_전략": [],
+            "협업_구조_개선_방향": []
         }
     
     # --- 7. 총평 ---
     총평 = {
-        "종합 의견": team_info.overall_comment or "작성된 총평이 없습니다."
+        "종합_의견": team_info.overall_comment or "작성된 총평이 없습니다."
     }
 
     # --- 최종 리포트 구성 ---
     final_report = {
-        "기본 정보": 기본정보,
-        "팀 종합 평가": 팀종합평가,
-        "팀 업무 목표 및 달성률": 팀업무목표및달성률,
-        "팀 성과 요약": 팀성과요약,
-        "팀 조직력 및 리스크 요인": 팀조직력및리스크요인,
-        "다음 연도 운영 제안": 다음연도운영제안,
+        "기본_정보": 기본정보,
+        "팀_종합_평가": 팀종합평가,
+        "팀_업무_목표_및_달성률": 팀업무목표및달성률,
+        "팀_성과_요약": 팀성과요약,
+        "팀_조직력_및_리스크_요인": 팀조직력및리스크요인,
+        "다음_연도_운영_제안": 다음연도운영제안,
         "총평": 총평
     }
     
@@ -403,9 +403,9 @@ def save_team_json_report_to_db(engine: Engine, team_evaluation_id: int, json_re
                 raise
 
 def validate_team_report(report: dict) -> bool:
-    required_keys = ["기본 정보", "팀 종합 평가", "팀 업무 목표 및 달성률", 
-                    "팀 성과 요약", "팀 조직력 및 리스크 요인", 
-                    "다음 연도 운영 제안", "총평"]
+    required_keys = ["기본_정보", "팀_종합_평가", "팀_업무_목표_및_달성률", 
+                    "팀_성과_요약", "팀_조직력_및_리스크_요인", 
+                    "다음_연도_운영_제안", "총평"]
     
     print(f"   - 🔍 연말 팀 평가 리포트 검증 시작...")
     for key in required_keys:

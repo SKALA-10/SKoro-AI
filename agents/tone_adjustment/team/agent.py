@@ -1,7 +1,6 @@
-
 """
-팀장용 레포트 톤 보정 Agent - 상태 관리 및 메인 에이전트 클래스
-Team manager report tone correction agent - state management and main agent class
+팀장용 레포트 톤 보정 Agent - 상태 관리 및 메인 에이전트 클래스 (개선된 버전)
+Team manager report tone correction agent - state management and main agent class (improved version)
 """
 
 import json
@@ -52,14 +51,11 @@ class ManagerReportToneAgent:
             'failed': 0,
             'quarterly_reports': 0,
             'annual_reports': 0,
-            'reconstructed': 0
+            'tone_corrected': 0
         }
 
     def load_reports_from_db(self) -> List[ManagerReportData]:
-        """DB에서 모든 팀장용 레포트 로드"""
-        # safe_json_loads_manager를 여기서 지연 import
-        from llm_utils import safe_json_loads_manager
-        
+        """DB에서 모든 팀장용 레포트 로드"""        
         reports = []
         print("=== 팀장용 레포트 로드 시작 ===")
 
@@ -73,11 +69,19 @@ class ManagerReportToneAgent:
                 try:
                     print(f"\n🔄 팀장용 레포트 ID {report_row['id']} 처리 중...")
                 
-                    # 안전한 JSON 로드 사용
-                    report_json = safe_json_loads_manager(report_row['report'])
+                    # JSON 데이터 처리 - 이미 파싱된 JSON 객체라고 가정
+                    report_json = report_row['report']
                     
-                    if report_json is None:
-                        print(f"❌ JSON 처리 최종 실패, 스킵")
+                    # 만약 문자열이라면 JSON 파싱
+                    if isinstance(report_json, str):
+                        try:
+                            report_json = json.loads(report_json)
+                        except json.JSONDecodeError as e:
+                            print(f"❌ JSON 파싱 실패: {e}")
+                            continue
+                    
+                    if not isinstance(report_json, dict):
+                        print(f"❌ 올바르지 않은 데이터 형식, 스킵")
                         continue
                         
                     print(f"✅ JSON 처리 성공")
@@ -116,23 +120,9 @@ class ManagerReportToneAgent:
         return reports
     
     def identify_report_type(self, report_data: Dict[str, Any]) -> ManagerReportType:
-        """레포트 타입 식별"""
+        """레포트 타입 식별 - 연말/분기 구분"""
         try:
-            # 다양한 키 형태 시도
-            period = ""
-            basic_info_keys = ['팀_기본정보', '기본_정보', '기본 정보']
-            period_keys = ['업무_수행_기간', '업무 수행 기간']
-        
-            for basic_key in basic_info_keys:
-                if basic_key in report_data:
-                    basic_info = report_data[basic_key]
-                    for period_key in period_keys:
-                        if period_key in basic_info:
-                            period = basic_info[period_key]
-                            break
-                    if period:
-                        break
-        
+            period = self.extract_period(report_data).lower()
             print(f"추출된 기간: '{period}'")  # 디버깅용
         
             if '연말' in period:
@@ -140,11 +130,10 @@ class ManagerReportToneAgent:
             elif '분기' in period:
                 return ManagerReportType.MANAGER_QUARTERLY
         
-            return ManagerReportType.MANAGER_QUARTERLY
+            return ManagerReportType.MANAGER_QUARTERLY  # 기본값
         except Exception as e:
             print(f"레포트 타입 식별 오류: {e}")
             return ManagerReportType.MANAGER_QUARTERLY
-
 
     def extract_team_name(self, report_data: Dict[str, Any]) -> str:
         """팀명 추출"""
@@ -206,9 +195,11 @@ class ManagerReportToneAgent:
         try:
             original_text = json.dumps(report_data.report_json, ensure_ascii=False, indent=2)
             
+            # LLM에 JSON 객체 직접 전달
             llm_response = self.llm_client.correct_tone(report_data.report_json, report_data.report_type)
             
             try:
+                # LLM 응답에서 JSON 추출
                 corrected_text = llm_response
                 if "```json" in llm_response:
                     corrected_text = llm_response.split("```json")[1].split("```")[0].strip()
@@ -216,8 +207,12 @@ class ManagerReportToneAgent:
                     corrected_text = llm_response.split("```")[1].strip()
                 
                 # JSON 유효성 검증
-                json.loads(corrected_text)
-                print(f"✅ LLM 응답 JSON 파싱 성공")
+                corrected_json = json.loads(corrected_text)
+                
+                # 글자수 검증 (팀원별_성과_분석 > 팀원_성과표 > 기여_내용)
+                self.validate_character_limits(corrected_json)
+                
+                print(f"✅ LLM 응답 JSON 파싱 및 검증 성공")
                 
             except (json.JSONDecodeError, IndexError) as e:
                 print(f"⚠️ LLM 응답 JSON 파싱 오류: {e}")
@@ -245,6 +240,24 @@ class ManagerReportToneAgent:
                 llm_response=f"오류 발생: {str(e)}",
                 processing_time=processing_time
             )
+    
+    def validate_character_limits(self, report_json: Dict[str, Any]) -> None:
+        """글자수 제한 검증 (팀원별 기여_내용 200자 이내)"""
+        try:
+            team_analysis = report_json.get('팀원_성과_분석', {})
+            team_members = team_analysis.get('팀원별_기여도', [])
+            
+            for member in team_members:
+                contribution = member.get('기여_내용', '')
+                member_name = member.get('이름', 'Unknown')
+                
+                if len(contribution) > 200:
+                    print(f"⚠️ 글자수 초과: {member_name} - {len(contribution)}자 (기여_내용)")
+                else:
+                    print(f"✅ 글자수 준수: {member_name} - {len(contribution)}자 (기여_내용)")
+                    
+        except Exception as e:
+            print(f"⚠️ 글자수 검증 오류: {e}")
     
     def save_corrected_report(self, report_data: ManagerReportData, corrected_text: str) -> bool:
         """보정된 레포트를 DB에 저장"""
@@ -286,6 +299,10 @@ class ManagerReportToneAgent:
                 
                 print(f"  ⏱️  처리 시간: {correction.processing_time:.2f}초")
                 
+                # 톤 보정 여부 확인
+                if correction.corrected_text != correction.original_text:
+                    self.processing_stats['tone_corrected'] += 1
+                
                 success = self.save_corrected_report(report_data, correction.corrected_text)
                 if success:
                     print(f"  ✅ DB 업데이트 성공")
@@ -313,7 +330,7 @@ class ManagerReportToneAgent:
             'failed': 0,
             'quarterly_reports': 0,
             'annual_reports': 0,
-            'reconstructed': 0
+            'tone_corrected': 0
         }
         print("📊 팀장용 Agent 통계가 초기화되었습니다.")
     
@@ -335,51 +352,17 @@ class ManagerReportToneAgent:
    - 팀장용 분기별 레포트: {stats['quarterly_reports']}개
    - 팀장용 연말 레포트: {stats['annual_reports']}개
 
-🔧 JSON 처리:
-   - 재구성된 레포트: {stats['reconstructed']}개
+🎯 톤 보정:
+   - 실제 톤 보정된 레포트: {stats['tone_corrected']}개
 
-🎯 Agent 상태: {'✅ 정상 완료' if stats['total_processed'] > 0 else '⏳ 대기 중'}
+🔧 Agent 상태: {'✅ 정상 완료' if stats['total_processed'] > 0 else '⏳ 대기 중'}
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
         """)
 
 # 테스트 및 검증 함수
-def test_manager_json_reconstruction(engine):
-    """팀장용 JSON 재구성 기능 테스트"""
-    from llm_utils import safe_json_loads_manager
-    print("=== 팀장용 JSON 재구성 기능 테스트 ===")
-    
-    with engine.connect() as connection:
-        query = text("SELECT report FROM team_evaluations WHERE report IS NOT NULL LIMIT 1")
-        result = connection.execute(query).fetchone()
-        
-        if result:
-            raw_text = result[0]
-            
-            # 재구성 테스트
-            reconstructed = safe_json_loads_manager(raw_text)
-            
-            if reconstructed:
-                print("✅ 팀장용 JSON 재구성 성공!")
-                print(f"재구성된 팀명: {reconstructed.get('팀_기본정보', {}).get('팀명', '불명')}")
-                print(f"팀장명: {reconstructed.get('팀_기본정보', {}).get('팀장명', '불명')}")
-                team_members = reconstructed.get('팀원별_성과_분석', {}).get('팀원_성과표', [])
-                print(f"팀원 수: {len(team_members)}명")
-                return True
-            else:
-                print("❌ 팀장용 JSON 재구성 실패")
-                return False
-        else:
-            print("❌ 테스트 데이터 없음")
-            return False
-
 def quick_test_manager(engine, llm_client):
     """팀장용 Agent 빠른 테스트"""
     print("=== 팀장용 Agent 빠른 테스트 ===")
-    
-    # JSON 재구성 테스트
-    if not test_manager_json_reconstruction(engine):
-        print("❌ 기본 기능 테스트 실패")
-        return
     
     # Agent 초기화 테스트
     try:
