@@ -1,18 +1,16 @@
 # =====================================
 # 연말 1단계 평가 워크플로우
 # =====================================
-# 목적: AI 기반 팀별 평가 수행 (모듈2,3,6,4,7) + 연말 중간평가 리포트 생성 및 톤 조정
-# Phase 1: 팀별 평가 (모듈2,3,6)
+# 목적: AI 기반 팀별 평가 수행 (모듈2,3,4,6,7) + 연말 중간평가 리포트 생성 및 톤 조정
+# Phase 1: 팀별 평가 (모듈2,3,4,6,7 순차 실행)
 # - 모듈2: 목표달성도 분석
 # - 모듈3: Peer Talk 분석  
-# - 모듈6: 4P BARS 평가
-# Phase 2: 팀별 평가 (모듈4)
 # - 모듈4: 협업 분석
-# Phase 3: 팀별 평가 (모듈7)
-# - 모듈7: 종합평가 점수 산정
-# Phase 4: 연말 중간평가 리포트 생성 및 톤 조정
-# - 4.1: 연말 중간평가 리포트 생성
-# - 4.2: 팀 중간평가 리포트 톤 조정
+# - 모듈6: 4P BARS 평가
+# - 모듈7: 종합평가 점수 산정 + 팀내CL정규화
+# Phase 2: 연말 중간평가 리포트 생성 및 톤 조정
+# - 연말 중간평가 리포트 생성
+# - 팀 중간평가 리포트 톤 조정
 # 완료 후: 팀장이 프론트엔드에서 수정 및 제출 필요
 # =====================================
 # 사용 예시 (터미널 실행 명령어)
@@ -26,10 +24,6 @@
 # 특정 단계만 실행:
 #   python agents/workflow/annual_phase1_workflow.py --period-id 4 --phase 1 --teams 1
 #   python agents/workflow/annual_phase1_workflow.py --period-id 4 --phase 2 --teams 1
-#   python agents/workflow/annual_phase1_workflow.py --period-id 4 --phase 3 --teams 1
-#   python agents/workflow/annual_phase1_workflow.py --period-id 4 --phase 4 --teams 1
-#   python agents/workflow/annual_phase1_workflow.py --period-id 4 --phase 4.1 --teams 1
-#   python agents/workflow/annual_phase1_workflow.py --period-id 4 --phase 4.2 --teams 1
 # =====================================
 
 import argparse
@@ -48,12 +42,15 @@ import sys
 logging.basicConfig(level=logging.INFO, format='[%(asctime)s] %(levelname)s: %(message)s')
 logging.getLogger("httpx").setLevel(logging.WARNING)
 
-# Phase 1: 모듈2,3,6 (팀별)
+# Phase 1: 모듈2,3,4,6,7 순차 실행 (팀별)
 def run_phase1_all_teams(teams, period_id):
-    logging.info("Phase1: 모듈2,3,6 실행 시작")
+    logging.info("Phase1: 모듈2,3,4,6,7 순차 실행 시작")
+    
     for idx, team_id in enumerate(teams, 1):
         logging.info(f"[Phase1] 팀 {team_id} ({idx}/{len(teams)}) 시작")
+        
         # 1. 모듈2 (목표달성도)
+        logging.info(f"[Phase1][모듈2] 팀 {team_id} 실행")
         def module2_func(team_id, period_id):
             task_ids, kpi_ids = fetch_team_tasks_and_kpis(team_id, period_id)
             state = {
@@ -62,7 +59,6 @@ def run_phase1_all_teams(teams, period_id):
                 "period_id": period_id,
                 "target_task_ids": task_ids,
                 "target_team_kpi_ids": kpi_ids,
-                # 연말 평가에서 필요한 키들 추가
                 "feedback_report_ids": [],
                 "final_evaluation_report_ids": [],
                 "updated_task_ids": [],
@@ -75,14 +71,16 @@ def run_phase1_all_teams(teams, period_id):
             graph.invoke(state)
             return True
         run_team_module_with_retry(team_id, module2_func, period_id)
+        
         # 2. 모듈3 (Peer Talk)
+        logging.info(f"[Phase1][모듈3] 팀 {team_id} 실행")
         def module3_func(team_id, period_id):
             members = fetch_team_members(team_id)
             for member in members:
                 if member.get('role') == 'MANAGER':
                     continue
                 state = {
-                    "team_id": team_id,  # team_id 추가
+                    "team_id": team_id,
                     "period_id": period_id,
                     "target_emp_no": member['emp_no'],
                     "peer_evaluation_ids": [],
@@ -103,7 +101,29 @@ def run_phase1_all_teams(teams, period_id):
                 graph.invoke(state)
             return True
         run_team_module_with_retry(team_id, module3_func, period_id)
-        # 3. 모듈6 (4P BARS)
+        
+        # 3. 모듈4 (협업 분석)
+        logging.info(f"[Phase1][모듈4] 팀 {team_id} 실행")
+        def module4_func(team_id, period_id):
+            _, kpi_ids = fetch_team_tasks_and_kpis(team_id, period_id)
+            state = {
+                "report_type": "annual",
+                "team_id": team_id,
+                "period_id": period_id,
+                "target_team_kpi_ids": kpi_ids,
+                "collaboration_relationships": None,
+                "individual_collaboration_analysis": None,
+                "team_collaboration_matrix": None,
+                "team_evaluation_id": None,
+                "messages": None
+            }
+            graph = create_module4_graph()
+            graph.invoke(state)
+            return True
+        run_team_module_with_retry(team_id, module4_func, period_id)
+        
+        # 4. 모듈6 (4P BARS)
+        logging.info(f"[Phase1][모듈6] 팀 {team_id} 실행")
         def module6_func(team_id, period_id):
             members = fetch_team_members(team_id)
             for member in members:
@@ -126,39 +146,9 @@ def run_phase1_all_teams(teams, period_id):
                 graph.invoke(state)
             return True
         run_team_module_with_retry(team_id, module6_func, period_id)
-        update_team_status(team_id, period_id, "AI_PHASE1_COMPLETED")
-        logging.info(f"[Phase1] 팀 {team_id} 완료")
-
-# Phase 2: 모듈4 (팀별)
-def run_phase2_all_teams(teams, period_id):
-    logging.info("Phase2: 모듈4 실행 시작")
-    for idx, team_id in enumerate(teams, 1):
-        logging.info(f"[Phase2] 팀 {team_id} ({idx}/{len(teams)}) 시작")
-        def module4_func(team_id, period_id):
-            _, kpi_ids = fetch_team_tasks_and_kpis(team_id, period_id)
-            state = {
-                "report_type": "annual",
-                "team_id": team_id,
-                "period_id": period_id,
-                "target_team_kpi_ids": kpi_ids,
-                "collaboration_relationships": None,
-                "individual_collaboration_analysis": None,
-                "team_collaboration_matrix": None,
-                "team_evaluation_id": None,
-                "messages": None
-            }
-            graph = create_module4_graph()
-            graph.invoke(state)
-            return True
-        run_team_module_with_retry(team_id, module4_func, period_id)
-        update_team_status(team_id, period_id, "AI_PHASE2_COMPLETED")
-        logging.info(f"[Phase2] 팀 {team_id} 완료")
-
-# Phase 3: 모듈7 (팀별)
-def run_phase3_all_teams(teams, period_id):
-    logging.info("Phase3: 모듈7 실행 시작")
-    for idx, team_id in enumerate(teams, 1):
-        logging.info(f"[Phase3] 팀 {team_id} ({idx}/{len(teams)}) 시작")
+        
+        # 5. 모듈7 (종합평가 점수 산정 + 팀내CL정규화)
+        logging.info(f"[Phase1][모듈7] 팀 {team_id} 실행")
         def module7_func(team_id, period_id):
             state = {
                 "report_type": "annual",
@@ -170,28 +160,30 @@ def run_phase3_all_teams(teams, period_id):
             graph.invoke(state)
             return True
         run_team_module_with_retry(team_id, module7_func, period_id)
-        update_team_status(team_id, period_id, "AI_PHASE3_COMPLETED")
-        logging.info(f"[Phase3] 팀 {team_id} 완료")
+        
+        update_team_status(team_id, period_id, "AI_PHASE1_COMPLETED")
+        logging.info(f"[Phase1] 팀 {team_id} 완료")
 
-# Phase 4.1: 연말 중간평가 리포트 생성
-def run_phase4_1_middle_reports(period_id: int, teams):
+# Phase 2: 연말 중간평가 리포트 생성 및 톤 조정
+def run_phase2_reports_and_tone(period_id: int, teams):
     """
-    Phase4.1: 연말 중간평가 리포트 생성
+    Phase2: 연말 중간평가 리포트 생성 → 톤 조정
     """
-    logging.info("Phase4.1: 연말 중간평가 리포트 생성 시작")
+    logging.info("Phase2: 연말 중간평가 리포트 생성 및 톤 조정 시작")
     
-    from agents.report.annual_middle_reports import main as generate_middle_reports
-    generate_middle_reports(period_id=period_id, teams=teams)
-    
-    logging.info("Phase4.1: 연말 중간평가 리포트 생성 완료!")
-
-def run_phase4_2_team_interim_tone_adjustment(period_id: int, teams):
-    """
-    Phase4.2: 팀 중간평가 리포트 톤 조정 및 DB 업데이트
-    """
-    logging.info("Phase4.2: 팀 중간평가 톤 조정 시작")
-    
+    # 1. 연말 중간평가 리포트 생성
     try:
+        logging.info("[Phase2] 연말 중간평가 리포트 생성 시작")
+        from agents.report.annual_middle_reports import main as generate_middle_reports
+        generate_middle_reports(period_id=period_id, teams=teams)
+        logging.info("[Phase2] 연말 중간평가 리포트 생성 완료")
+    except Exception as e:
+        logging.error(f"[Phase2] 연말 중간평가 리포트 생성 실패: {e}")
+    
+    # 2. 팀 중간평가 톤 조정
+    try:
+        logging.info("[Phase2] 팀 중간평가 톤 조정 시작")
+        
         # LLM 클라이언트 초기화
         from langchain_openai import ChatOpenAI
         llm_client = ChatOpenAI(
@@ -205,70 +197,62 @@ def run_phase4_2_team_interim_tone_adjustment(period_id: int, teams):
         
         result = run_team_tone_adjustment_for_teams(period_id, teams, llm_client, report_type="team_interim_evaluation")
         
-        logging.info("Phase4.2: 팀 중간평가 톤 조정 완료!")
-        return result
-        
+        logging.info("[Phase2] 팀 중간평가 톤 조정 완료")
     except Exception as e:
-        logging.error(f"❌ 팀 중간평가 톤 조정 실행 중 오류: {e}")
-        return {"status": "error", "message": str(e)}
-
-def run_phase4_reports(period_id: int, teams):
-    """
-    Phase4: 연말 중간평가 리포트 생성 → 톤 조정 순서로 실행
-    """
-    logging.info("Phase4: 전체 리포트 프로세스 시작")
+        logging.error(f"[Phase2] 팀 중간평가 톤 조정 실패: {e}")
+        result = None
     
-    # 4.1: 연말 중간평가 리포트 생성
-    try:
-        logging.info("[Phase4] 중간평가 리포트 생성 시작")
-        run_phase4_1_middle_reports(period_id, teams)
-        logging.info("[Phase4] 중간평가 리포트 생성 완료")
-    except Exception as e:
-        logging.error(f"[Phase4] 중간평가 리포트 생성 실패: {e}")
+    # Phase2 완료 후 상태 업데이트
+    for team_id in teams:
+        update_team_status(team_id, period_id, "AI_PHASE2_COMPLETED")
     
-    # 4.2: 팀 중간평가 톤 조정
-    try:
-        logging.info("[Phase4] 팀 중간평가 톤 조정 시작")
-        tone_result = run_phase4_2_team_interim_tone_adjustment(period_id, teams)
-        logging.info("[Phase4] 팀 중간평가 톤 조정 완료")
-    except Exception as e:
-        logging.error(f"[Phase4] 팀 중간평가 톤 조정 실패: {e}")
-        tone_result = None
-    
-    logging.info("Phase4: 전체 리포트 프로세스 완료!")
-    return tone_result
+    logging.info("Phase2: 전체 완료!")
 
 def run_auto_workflow(period_id: int, specific_teams=None):
     """
-    --auto 옵션: Phase1/2/3(팀별 평가) → 동기화 체크 → Phase4(연말 중간평가 리포트 생성)까지 자동 실행
+    --auto 옵션: Phase1 → Phase2까지 자동 실행
     """
     logging.info("[AUTO] 연말 1단계 평가 자동 실행 시작")
     teams = get_target_teams(period_id, specific_teams)
     logging.info(f"[AUTO] 평가 대상 팀: {teams}")
 
-    # Phase1/2/3: 팀별 평가
+    # Phase1: 팀별 평가 (모듈2,3,4,6,7)
     run_phase1_all_teams(teams, period_id)
-    run_phase2_all_teams(teams, period_id)
-    run_phase3_all_teams(teams, period_id)
-
-    # 동기화 체크
-    all_completed = check_all_teams_phase_completed(teams, period_id, 'AI_PHASE3_COMPLETED')
+    
+    # Phase1 완료 체크
+    all_completed = check_all_teams_phase_completed(teams, period_id, 'AI_PHASE1_COMPLETED')
     if not all_completed:
-        logging.warning(f"[AUTO] 일부 팀이 아직 Phase3를 완료하지 못했습니다.")
+        logging.error(f"[AUTO] 일부 팀이 Phase1을 완료하지 못했습니다. Phase2를 실행할 수 없습니다.")
+        return
     else:
-        logging.info("[AUTO] 모든 팀이 Phase3를 완료했습니다.")
+        logging.info("[AUTO] 모든 팀이 Phase1을 완료했습니다.")
 
-    # Phase4: 연말 중간평가 리포트 생성
-    run_phase4_reports(period_id, teams)
+    # Phase2: 연말 중간평가 리포트 생성 및 톤 조정
+    run_phase2_reports_and_tone(period_id, teams)
     
     logging.info("[AUTO] 연말 1단계 평가 자동 실행 완료!")
 
 def main():
-    parser = argparse.ArgumentParser()
-    parser.add_argument('--period-id', type=int, required=True)
-    parser.add_argument('--teams', help='1,2,3 or all', required=False, default=None)
+    parser = argparse.ArgumentParser(
+        description="연말 1단계 평가 워크플로우",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+사용 예시:
+  # 전체 자동 실행
+  python agents/workflow/annual_phase1_workflow.py --period-id 4 --auto
+  
+  # 특정 팀만 자동 실행
+  python agents/workflow/annual_phase1_workflow.py --period-id 4 --auto --teams 1
+  
+  # 특정 단계만 실행
+  python agents/workflow/annual_phase1_workflow.py --period-id 4 --phase 1 --teams 1
+  python agents/workflow/annual_phase1_workflow.py --period-id 4 --phase 2 --teams 1
+        """
+    )
+    parser.add_argument('--period-id', type=int, required=True, help='연말 1단계 ID (예: 4)')
+    parser.add_argument('--teams', help='팀 ID (예: 1,2,3 또는 all)', required=False, default=None)
     parser.add_argument('--auto', action='store_true', help='모든 단계 자동 실행')
-    parser.add_argument('--phase', type=str, choices=['1', '2', '3', '4', '4.1', '4.2'], help='특정 Phase만 실행')
+    parser.add_argument('--phase', type=str, choices=['1', '2'], help='특정 Phase만 실행')
     args = parser.parse_args()
 
     # 팀 목록 파싱
@@ -276,6 +260,15 @@ def main():
         team_list = parse_teams(args.teams)
     else:
         team_list = None
+
+    # --auto 옵션: 전체 자동 실행
+    if args.auto:
+        if team_list:
+            logging.info(f"[AUTO] 지정된 팀만 자동 실행: {team_list}")
+        else:
+            logging.info("[AUTO] 전체 팀 자동 실행")
+        run_auto_workflow(args.period_id, team_list)
+        sys.exit(0)
 
     # --phase 옵션: 특정 Phase만 실행
     if args.phase:
@@ -285,46 +278,27 @@ def main():
         if args.phase == '1':
             run_phase1_all_teams(teams, args.period_id)
         elif args.phase == '2':
-            run_phase2_all_teams(teams, args.period_id)
-        elif args.phase == '3':
-            run_phase3_all_teams(teams, args.period_id)
-        elif args.phase == '4':
-            run_phase4_reports(args.period_id, teams)
-        elif args.phase == '4.1':
-            run_phase4_1_middle_reports(args.period_id, teams)
-        elif args.phase == '4.2':
-            run_phase4_2_team_interim_tone_adjustment(args.period_id, teams)
+            # Phase1 완료 체크
+            if not check_all_teams_phase_completed(teams, args.period_id, "AI_PHASE1_COMPLETED"):
+                logging.error("일부 팀이 Phase1을 완료하지 못했습니다.")
+                return
+            run_phase2_reports_and_tone(args.period_id, teams)
         
         logging.info(f"[Phase{args.phase}] 완료!")
         sys.exit(0)
 
-    # --auto 옵션: 전체 or 특정 팀만 자동 실행
-    if args.auto:
-        if team_list:
-            logging.info(f"[AUTO] 지정된 팀만 자동 실행: {team_list}")
-        else:
-            logging.info("[AUTO] 전체 팀 자동 실행")
-        run_auto_workflow(args.period_id, team_list)
-        sys.exit(0)
-
+    # 기본 실행: 모든 단계 순차 실행
     teams = get_target_teams(args.period_id, team_list)
     logging.info(f"🚀 연말 1단계 평가 시작: {len(teams)}개 팀")
 
+    # Phase1: 팀별 평가 (모듈2,3,4,6,7)
     run_phase1_all_teams(teams, args.period_id)
     if not check_all_teams_phase_completed(teams, args.period_id, "AI_PHASE1_COMPLETED"):
         logging.warning("일부 팀이 Phase1을 완료하지 못했습니다. 중단합니다.")
         return
-    run_phase2_all_teams(teams, args.period_id)
-    if not check_all_teams_phase_completed(teams, args.period_id, "AI_PHASE2_COMPLETED"):
-        logging.warning("일부 팀이 Phase2를 완료하지 못했습니다. 중단합니다.")
-        return
-    run_phase3_all_teams(teams, args.period_id)
-    if not check_all_teams_phase_completed(teams, args.period_id, "AI_PHASE3_COMPLETED"):
-        logging.warning("일부 팀이 Phase3를 완료하지 못했습니다. 중단합니다.")
-        return
     
-    # Phase4: 연말 중간평가 리포트 생성
-    run_phase4_reports(args.period_id, teams)
+    # Phase2: 연말 중간평가 리포트 생성 및 톤 조정
+    run_phase2_reports_and_tone(args.period_id, teams)
     
     logging.info("연말 1단계 평가 워크플로우 완료! 팀장 수정 및 제출을 기다립니다.")
 
