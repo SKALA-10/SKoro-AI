@@ -290,37 +290,23 @@ def update_feedback_report_attitude(feedback_report_id: int, attitude: str) -> b
 def save_quarterly_4p_results(feedback_report_id: int, integrated_result: Dict) -> bool:
     """분기 4P 결과를 feedback_reports 테이블에 저장"""
 
-    # 각 P별 대표 evidence 1개씩 선택 (가장 임팩트 있는 것)
-    passionate_highlight = (
-        integrated_result["passionate"]["evidence"][0]
-        if integrated_result["passionate"]["evidence"]
-        else "열정적 업무 수행"
-    )
-    proactive_highlight = (
-        integrated_result["proactive"]["evidence"][0]
-        if integrated_result["proactive"]["evidence"]
-        else "주도적 업무 진행"
-    )
-    professional_highlight = (
-        integrated_result["professional"]["evidence"][0]
-        if integrated_result["professional"]["evidence"]
-        else "전문적 업무 수행"
-    )
-    people_highlight = (
-        integrated_result["people"]["evidence"][0]
-        if integrated_result["people"]["evidence"]
-        else "협력적 업무 참여"
-    )
+    # evidence 리스트를 줄바꿈으로 구분된 텍스트로 변환
+    def evidence_to_text(evidence_list):
+        if not evidence_list:
+            return ""
+        if isinstance(evidence_list, list):
+            return "\n".join(evidence_list)
+        return str(evidence_list)
 
-    # 분기용 깔끔한 5줄 개조식 텍스트
-    quarterly_text = f"""* Passionate 성과 하이라이트: {passionate_highlight}
-* Proactive 주도적 성과: {proactive_highlight}
-* Professional 전문성 발휘: {professional_highlight}  
-* People 협업 기여: {people_highlight}
-* 종합 평가: {integrated_result['comprehensive_assessment']}""".strip()
-
+    # 새로운 JSON 구조로 저장
     quarterly_format = {
-        "evaluation_text": quarterly_text,
+        "업무_실행_및_태도": {
+            "Passionate": f"성과 하이라이트:\n{evidence_to_text(integrated_result['passionate']['evidence'])}",
+            "Proactive": f"주도적 성과:\n{evidence_to_text(integrated_result['proactive']['evidence'])}",
+            "Professional": f"전문성 발휘:\n{evidence_to_text(integrated_result['professional']['evidence'])}",
+            "People": f"협업 기여:\n{evidence_to_text(integrated_result['people']['evidence'])}",
+            "종합_평가": integrated_result['comprehensive_assessment']
+        },
         "scores": {
             "passionate": integrated_result["passionate"]["score"],
             "proactive": integrated_result["proactive"]["score"],

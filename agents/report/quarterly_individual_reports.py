@@ -294,8 +294,8 @@ def safe_convert_to_serializable(obj):
     if obj is None: return "" # None을 빈 문자열로 변환
     return obj
 
-def parse_4p_evaluation_text(evaluation_text: str) -> Dict[str, str]:
-    """4P 평가 텍스트를 파싱해서 각 항목별로 분리"""
+def parse_4p_evaluation_data(fourp_data: Dict) -> Dict[str, str]:
+    """4P 평가 JSON 데이터를 파싱해서 각 항목별로 분리"""
     result = {
         "Passionate": "",
         "Proactive": "", 
@@ -304,23 +304,61 @@ def parse_4p_evaluation_text(evaluation_text: str) -> Dict[str, str]:
         "종합_평가": ""
     }
     
-    if not evaluation_text:
+    if not fourp_data:
         return result
     
-    lines = evaluation_text.split('\n')
+    # 새로운 JSON 구조에서 직접 추출 (우선 시도)
+    업무_실행_및_태도 = fourp_data.get("업무_실행_및_태도", {})
     
-    for line in lines:
-        line = line.strip()
-        if line.startswith('* Passionate'):
-            result["Passionate"] = line.replace('* Passionate 성과 하이라이트: ', '').replace('* Passionate', '').strip()
-        elif line.startswith('* Proactive'):
-            result["Proactive"] = line.replace('* Proactive 주도적 성과: ', '').replace('* Proactive', '').strip()
-        elif line.startswith('* Professional'):
-            result["Professional"] = line.replace('* Professional 전문성 발휘: ', '').replace('* Professional', '').strip()
-        elif line.startswith('* People'):
-            result["People"] = line.replace('* People 협업 기여: ', '').replace('* People', '').strip()
-        elif line.startswith('* 종합 평가'):
-            result["종합_평가"] = line.replace('* 종합 평가: ', '').strip()
+    if 업무_실행_및_태도:
+        # 새로운 구조
+        result["Passionate"] = 업무_실행_및_태도.get("Passionate", "")
+        result["Proactive"] = 업무_실행_및_태도.get("Proactive", "")
+        result["Professional"] = 업무_실행_및_태도.get("Professional", "")
+        result["People"] = 업무_실행_및_태도.get("People", "")
+        result["종합_평가"] = 업무_실행_및_태도.get("종합_평가", "")
+    else:
+        # 기존 구조 fallback (evaluation_text 파싱)
+        evaluation_text = fourp_data.get('evaluation_text', '')
+        if evaluation_text:
+            lines = evaluation_text.split('\n')
+            current_section = None
+            current_content = []
+            
+            for line in lines:
+                line = line.strip()
+                if line.startswith('* Passionate'):
+                    if current_section and current_content:
+                        result[current_section] = '\n'.join(current_content)
+                    current_section = "Passionate"
+                    current_content = [line.replace('* Passionate 성과 하이라이트: ', '').replace('* Passionate', '').strip()]
+                elif line.startswith('* Proactive'):
+                    if current_section and current_content:
+                        result[current_section] = '\n'.join(current_content)
+                    current_section = "Proactive"
+                    current_content = [line.replace('* Proactive 주도적 성과: ', '').replace('* Proactive', '').strip()]
+                elif line.startswith('* Professional'):
+                    if current_section and current_content:
+                        result[current_section] = '\n'.join(current_content)
+                    current_section = "Professional"
+                    current_content = [line.replace('* Professional 전문성 발휘: ', '').replace('* Professional', '').strip()]
+                elif line.startswith('* People'):
+                    if current_section and current_content:
+                        result[current_section] = '\n'.join(current_content)
+                    current_section = "People"
+                    current_content = [line.replace('* People 협업 기여: ', '').replace('* People', '').strip()]
+                elif line.startswith('* 종합 평가'):
+                    if current_section and current_content:
+                        result[current_section] = '\n'.join(current_content)
+                    current_section = "종합_평가"
+                    current_content = [line.replace('* 종합 평가: ', '').strip()]
+                elif line and current_section and not line.startswith('*'):
+                    # 추가 내용이 있는 경우
+                    current_content.append(line)
+            
+            # 마지막 섹션 처리
+            if current_section and current_content:
+                result[current_section] = '\n'.join(current_content)
     
     return result
 
@@ -338,8 +376,8 @@ def generate_korean_feedback_report(
     growth_데이터 = safe_json_parse(피드백기본데이터.ai_growth_coaching)
     fourp_데이터 = safe_json_parse(피드백기본데이터.ai_4p_evaluation)
     
-    # 4P 평가 텍스트 파싱
-    fourp_파싱데이터 = parse_4p_evaluation_text(fourp_데이터.get('evaluation_text', ''))
+    # 4P 평가 데이터 파싱
+    fourp_파싱데이터 = parse_4p_evaluation_data(fourp_데이터)
 
     # CL 레벨 처리
     cl_레벨 = str(피드백기본데이터.cl).strip() if 피드백기본데이터.cl else ""
