@@ -158,7 +158,7 @@ class CommentGenerator:
             total_contribution = 0
             
             for task in tasks:
-                tasks_summary += f"- {task.get('task_name', '')}: 달성률 {task.get('ai_achievement_rate', 0)}%, 기여도 {task.get('ai_contribution_score', 0)}점\n"
+                tasks_summary += f"- {task.get('task_name', '')}: 달성률 {task.get('ai_achievement_rate', 0)}%, 기여도 {task.get('ai_contribution_score', 0)}%\n"
                 total_achievement += task.get('ai_achievement_rate', 0)
                 total_contribution += task.get('ai_contribution_score', 0)
             
@@ -264,7 +264,7 @@ class CommentGenerator:
             목표: {data.get('target_level', '')}
             누적 성과: {data.get('performance', '')}
             달성률: {data.get('achievement_rate', 0)}%
-            기여도: {data.get('contribution_score', 0)}점
+            기여도: {data.get('contribution_score', 0)}%
             """
         
         elif self.comment_type == "individual":
@@ -277,7 +277,7 @@ class CommentGenerator:
             
             종합 성과:
             - 평균 달성률: {data.get('avg_achievement', 0):.1f}%
-            - 평균 기여도: {data.get('avg_contribution', 0):.1f}점
+            - 평균 기여도: {data.get('avg_contribution', 0):.1f}%
             - 참여 Task 수: {data.get('task_count', 0)}개
             """
         
