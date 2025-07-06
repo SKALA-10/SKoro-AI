@@ -292,22 +292,22 @@ def save_quarterly_4p_results(feedback_report_id: int, integrated_result: Dict) 
 
     # 각 P별 대표 evidence 1개씩 선택 (가장 임팩트 있는 것)
     passionate_highlight = (
-        integrated_result["passionate"]["evidence"][0]
+        integrated_result["passionate"]["evidence"]
         if integrated_result["passionate"]["evidence"]
         else "열정적 업무 수행"
     )
     proactive_highlight = (
-        integrated_result["proactive"]["evidence"][0]
+        integrated_result["proactive"]["evidence"]
         if integrated_result["proactive"]["evidence"]
         else "주도적 업무 진행"
     )
     professional_highlight = (
-        integrated_result["professional"]["evidence"][0]
+        integrated_result["professional"]["evidence"]
         if integrated_result["professional"]["evidence"]
         else "전문적 업무 수행"
     )
     people_highlight = (
-        integrated_result["people"]["evidence"][0]
+        integrated_result["people"]["evidence"]
         if integrated_result["people"]["evidence"]
         else "협력적 업무 참여"
     )
